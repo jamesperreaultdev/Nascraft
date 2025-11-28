@@ -18,17 +18,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
-import me.bounser.nascraft.database.DatabaseManager;
 
 public class EditItemMenu {
 
@@ -307,11 +304,7 @@ public class EditItemMenu {
 
     public void save() {
 
-        File itemsFile = Config.getInstance().getItemsFile();
-        File categoriesFile = Config.getInstance().getCategoriesFile();
-        
-        FileConfiguration items = YamlConfiguration.loadConfiguration(itemsFile);
-        FileConfiguration categories = YamlConfiguration.loadConfiguration(categoriesFile);
+        FileConfiguration items = Config.getInstance().getItemsFileConfiguration();
 
         String identifier;
 
@@ -346,6 +339,8 @@ public class EditItemMenu {
             items.set("items." + identifier + ".currency", currency.getCurrencyIdentifier());
         }
 
+        FileConfiguration categories = Config.getInstance().getCategoriesFileConfiguration();
+
         List<String> itemsOfPrevCategory = categories.getStringList("categories." + prevCategory.getIdentifier() + ".items");
         itemsOfPrevCategory.remove(identifier);
         categories.set("categories." + prevCategory.getIdentifier() + ".items", itemsOfPrevCategory);
@@ -355,8 +350,8 @@ public class EditItemMenu {
         categories.set("categories." + category.getIdentifier() + ".items", itemsOfNewCategory);
 
         try {
-            categories.save(categoriesFile);
-            items.save(itemsFile);
+            categories.save(Config.getInstance().getCategoriesFile());
+            items.save(Config.getInstance().getItemsFile());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -384,9 +379,6 @@ public class EditItemMenu {
             item.setCurrency(currency);
             category.addItem(item);
             MarketManager.getInstance().addItem(item);
-            
-            DatabaseManager.get().getDatabase().saveItem(item);
-            
             player.sendMessage(ChatColor.LIGHT_PURPLE + "New item saved!");
         }
 
@@ -400,21 +392,19 @@ public class EditItemMenu {
         MarketManager.getInstance().removeItem(item);
         prevCategory.removeItem(item);
 
-        File itemsFile = Config.getInstance().getItemsFile();
-        File categoriesFile = Config.getInstance().getCategoriesFile();
-        
-        FileConfiguration items = YamlConfiguration.loadConfiguration(itemsFile);
-        FileConfiguration categories = YamlConfiguration.loadConfiguration(categoriesFile);
+        FileConfiguration items = Config.getInstance().getItemsFileConfiguration();
 
         items.set("items." + item.getIdentifier(), null);
+
+        FileConfiguration categories = Config.getInstance().getCategoriesFileConfiguration();
 
         List<String> itemsOfPrevCategory = categories.getStringList("categories." + prevCategory.getIdentifier() + ".items");
         itemsOfPrevCategory.remove(item.getIdentifier());
         categories.set("categories." + prevCategory.getIdentifier() + ".items", itemsOfPrevCategory);
 
         try {
-            categories.save(categoriesFile);
-            items.save(itemsFile);
+            categories.save(Config.getInstance().getCategoriesFile());
+            items.save(Config.getInstance().getItemsFile());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
