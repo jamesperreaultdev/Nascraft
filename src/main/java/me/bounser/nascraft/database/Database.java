@@ -115,4 +115,7 @@ public interface Database {
     String getNameByUUID(UUID uuid);
     void saveOrUpdateName(UUID uuid, String name);
 
+    void updateBalance(UUID uuid);
+    void saveOrUpdatePlayerStats(UUID uuid);
+
 }

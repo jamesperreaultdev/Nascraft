@@ -394,5 +394,14 @@ public class MySQL implements Database {
 
     }
 
+    @Override
+    public void updateBalance(UUID uuid) {
+
+    }
+
+    @Override
+    public void saveOrUpdatePlayerStats(UUID uuid) {
+
+    }
 
 }

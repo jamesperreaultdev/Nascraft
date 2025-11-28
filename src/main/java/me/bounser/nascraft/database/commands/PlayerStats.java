@@ -4,7 +4,6 @@ import me.bounser.nascraft.Nascraft;
 import me.bounser.nascraft.database.commands.resources.NormalisedDate;
 import me.bounser.nascraft.managers.DebtManager;
 import me.bounser.nascraft.portfolio.PortfoliosManager;
-import me.bounser.nascraft.web.dto.PlayerStatsDTO;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 
@@ -12,8 +11,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 public class PlayerStats {
@@ -55,30 +52,6 @@ public class PlayerStats {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    public static List<PlayerStatsDTO> getAllPlayerStats(Connection connection, UUID uuid) {
-        List<PlayerStatsDTO> statsList = new ArrayList<>();
-
-        try {
-            String sql = "SELECT day, uuid, balance, portfolio, debt FROM player_stats WHERE uuid=? ORDER BY day ASC;";
-            PreparedStatement prep = connection.prepareStatement(sql);
-            prep.setString(1, uuid.toString());
-            ResultSet resultSet = prep.executeQuery();
-
-            while (resultSet.next()) {
-                long time = NormalisedDate.getDateFromDay(resultSet.getInt("day")).getTime()/1000;
-                double balance = resultSet.getDouble("balance");
-                double portfolio = resultSet.getDouble("portfolio");
-                double debt = resultSet.getDouble("debt");
-
-                statsList.add(new PlayerStatsDTO(time, balance, portfolio, debt));
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-
-        return statsList;
     }
 
 }
