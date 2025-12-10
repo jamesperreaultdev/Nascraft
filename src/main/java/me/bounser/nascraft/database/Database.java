@@ -50,6 +50,11 @@ public interface Database {
     void retrieveItems();
     float retrieveLastPrice(Item item);
 
+    // Multi-market support
+    void saveItem(Item item, String marketId);
+    void retrieveItem(Item item, String marketId);
+    float retrieveLastPrice(Item item, String marketId);
+
     //
 
     void saveTrade(Trade trade);

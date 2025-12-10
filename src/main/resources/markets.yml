@@ -1,0 +1,67 @@
+# Nascraft Multi-Market Configuration
+# Each market operates independently with its own prices, stock, and items.
+# Each market restocks independently at random intervals!
+# Access markets via /market <marketId> or have NPCs run the command.
+
+# Define your markets here
+markets:
+  # The default market
+  default:
+    display-name: "Central Market"
+    use-global-items: true
+    # Restock settings (optional - uses global config.yml values if not set)
+    # restock-amount: 50        # Amount to restock each item
+    # restock-min-minutes: 30   # Minimum time between restocks
+    # restock-max-minutes: 120  # Maximum time between restocks
+
+  # Second market - display-name is optional (defaults to market ID if not set)
+  north:
+    use-global-items: true
+    # Optional: Custom restock settings for this market
+    # restock-amount: 25
+    # restock-min-minutes: 45   # This market restocks less frequently
+    # restock-max-minutes: 90
+    # Optional: Override initial prices and starting stock for specific items
+    # item-overrides:
+    #   diamond:
+    #     initial-price: 1500
+    #     starting-stock: 50
+    #   iron_ingot:
+    #     initial-price: 25
+    #     starting-stock: 500
+
+  # Third market
+  south:
+    use-global-items: true
+    # Optional: Custom restock settings for this market
+    # restock-amount: 75
+    # restock-min-minutes: 20   # This market restocks more frequently
+    # restock-max-minutes: 60
+    # Optional: Override initial prices and starting stock for specific items
+    # item-overrides:
+    #   diamond:
+    #     initial-price: 800
+    #     starting-stock: 200
+    #   gold_ingot:
+    #     initial-price: 100
+    #     starting-stock: 300
+
+# Example: A specialized mining market with custom items, prices, and restock
+#  mining:
+#    display-name: "Mining Outpost"  # Optional - defaults to "mining" if not set
+#    use-global-items: false
+#    restock-amount: 100            # Higher restock for mining market
+#    restock-min-minutes: 15        # Restocks frequently (15-30 min)
+#    restock-max-minutes: 30
+#    items:
+#      - iron_ingot
+#      - gold_ingot
+#      - diamond
+#      - coal
+#    item-overrides:
+#      diamond:
+#        initial-price: 2000
+#        starting-stock: 25
+#      iron_ingot:
+#        initial-price: 15
+#        starting-stock: 1000

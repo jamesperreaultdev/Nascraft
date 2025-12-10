@@ -29,6 +29,7 @@ import me.bounser.nascraft.inventorygui.InventoryListener;
 import me.bounser.nascraft.managers.DebtManager;
 import me.bounser.nascraft.managers.EventsManager;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.placeholderapi.PAPIExpansion;
 import me.bounser.nascraft.config.Config;
 import me.bounser.nascraft.sellwand.WandListener;
@@ -141,7 +142,12 @@ public final class Nascraft extends JavaPlugin {
 
         createImagesFolder();
 
+        // Initialize the legacy single-market manager (for backwards compatibility)
         MarketManager.getInstance();
+
+        // Initialize multi-market system
+        MarketsManager.getInstance();
+        getLogger().info("Multi-market system initialized.");
 
         if (config.isCommandEnabled("nascraft")) {
             new NascraftCommand();

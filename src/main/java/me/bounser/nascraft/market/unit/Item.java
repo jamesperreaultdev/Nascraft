@@ -41,6 +41,7 @@ public class Item {
 
     private ItemStack itemStack;
     private final String identifier;
+    private final String marketId;
     private String alias;
     private String taggedAlias;
     private String formattedAlias;
@@ -69,12 +70,31 @@ public class Item {
 
     boolean restricted;
 
+    /**
+     * Constructor for backwards compatibility (uses "default" market)
+     */
     public Item (ItemStack itemStack, String identifier, String alias, Category category, BufferedImage image) {
+        this(itemStack, identifier, alias, category, image, "default");
+    }
+
+    /**
+     * Main constructor with market ID support
+     */
+    public Item (ItemStack itemStack, String identifier, String alias, Category category, BufferedImage image, String marketId) {
+        this(itemStack, identifier, alias, category, image, marketId, null, null);
+    }
+
+    /**
+     * Full constructor with market ID and price/stock overrides
+     */
+    public Item (ItemStack itemStack, String identifier, String alias, Category category, BufferedImage image,
+                 String marketId, Double initialPriceOverride, Integer startingStockOverride) {
 
         itemStack.setAmount(1);
 
         this.itemStack = itemStack;
         this.identifier = identifier;
+        this.marketId = marketId;
 
         setupAlias(alias);
 
@@ -85,9 +105,14 @@ public class Item {
         if (currency == null)
             Nascraft.getInstance().getLogger().severe("Item: " + identifier + " doesn't have a valid currency.");
 
+        // Use override price if provided, otherwise use config
+        float initialPrice = initialPriceOverride != null ?
+                initialPriceOverride.floatValue() :
+                Config.getInstance().getInitialPrice(identifier);
+
         this.price = new Price(
                 this,
-                Config.getInstance().getInitialPrice(identifier),
+                initialPrice,
                 Config.getInstance().getElasticity(identifier),
                 Config.getInstance().getSupport(identifier),
                 Config.getInstance().getResistance(identifier),
@@ -96,7 +121,7 @@ public class Item {
         this.icon = image;
         this.restricted = Config.getInstance().getRestricted(identifier);
 
-        price.initializeHourValues(DatabaseManager.get().getDatabase().retrieveLastPrice(this));
+        price.initializeHourValues(DatabaseManager.get().getDatabase().retrieveLastPrice(this, marketId));
 
         this.category = category;
         operations = 0;
@@ -104,11 +129,17 @@ public class Item {
         parent = null;
 
         this.maxStock = 0; // No max stock limit
-        this.stock = Config.getInstance().getItemStartingStock(identifier);
+        // Use override stock if provided, otherwise use config
+        this.stock = startingStockOverride != null ?
+                startingStockOverride :
+                Config.getInstance().getItemStartingStock(identifier);
 
         itemStats = new ItemStats(this);
     }
 
+    /**
+     * Child item constructor - inherits parent's market ID
+     */
     public Item(Item parent, float multiplier, ItemStack itemStack, String identifier, String alias, Currency currency){
 
         this.currency = parent.getCurrency();
@@ -116,6 +147,7 @@ public class Item {
         itemStack.setAmount(1);
 
         this.parent = parent;
+        this.marketId = parent.getMarketId();
         this.itemStack = itemStack;
         this.multiplier = multiplier;
         this.identifier = identifier;
@@ -477,6 +509,8 @@ public class Item {
     }
 
     public String getIdentifier() { return identifier; }
+
+    public String getMarketId() { return marketId; }
 
     public List<Material> getParentAndChildsMaterials() {
         List<Material> materials = new ArrayList<>();

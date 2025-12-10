@@ -1,0 +1,24 @@
+# Nascraft Multi-Market Configuration
+# Each market operates independently with its own prices, stock, and items.
+# Access markets via /market <marketId> or have NPCs run the command.
+
+# Define your markets here
+markets:
+  # The default market - uses items.yml for items
+  default:
+    display-name: "Main Market"
+    use-global-items: true
+
+  # A mining-focused market with custom items
+  mining:
+    display-name: "Mining Outpost"
+    use-global-items: false
+    items:
+      - iron_ingot
+      - gold_ingot
+      - diamond
+      - coal
+      - copper_ingot
+      - emerald
+      - lapis_lazuli
+      - redstone

@@ -34,8 +34,8 @@ gui_stock_display: "<color:#ffae2b>Stock: [STOCK]</color>"
 # Stock restock broadcast messages
 # Available placeholders: [MINUTES]
 stock_restock_warning: "<gradient:#ffae2b:#ff6b00>The market stock will be restocked in [MINUTES] minute(s)!</gradient>"
-# Available placeholders: [AMOUNT]
-stock_restock_complete: "<gradient:#00ff6b:#00ffae>The market has been restocked! +[AMOUNT] stock added to all items.</gradient>"
+# Available placeholders: [AMOUNT], [MARKET]
+stock_restock_complete: "<gradient:#00ff6b:#00ffae>[MARKET] has been restocked!</gradient>"
 
 # Commands
 no_permission: "<gradient:#FB6363:#C4B3FD>✘ Permission required.</gradient>"

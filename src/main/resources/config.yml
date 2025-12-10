@@ -76,9 +76,14 @@ market-control:
     enabled: true
     # Default starting stock for each item
     default-stock: 50
-    # Amount of stock to add to each item per restock
+    # Amount of stock to add to each item per restock (can be overridden per-market in markets.yml)
     amount: 50
-    # How often to restock in minutes (60 = every hour)
+    # Random restock interval settings (each market restocks independently at random times)
+    # Minimum minutes between restocks
+    min-minutes: 30
+    # Maximum minutes between restocks
+    max-minutes: 120
+    # Legacy fixed interval (only used if min/max not set)
     interval-minutes: 60
     # How many minutes before restock to broadcast a warning (set to 0 to disable warning)
     warning-minutes: 1

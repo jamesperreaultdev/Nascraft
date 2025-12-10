@@ -14,7 +14,9 @@ import me.bounser.nascraft.managers.DebtManager;
 import me.bounser.nascraft.managers.InventoryManager;
 import me.bounser.nascraft.managers.MoneyManager;
 import me.bounser.nascraft.managers.currencies.CurrenciesManager;
+import me.bounser.nascraft.market.Market;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.market.limitorders.LimitOrder;
 import me.bounser.nascraft.market.limitorders.LimitOrdersManager;
 import me.bounser.nascraft.market.limitorders.OrderType;
@@ -58,7 +60,11 @@ public class InventoryListener implements Listener {
 
         if (metadata.startsWith("category-menu-")) {
 
-            Category category = MarketManager.getInstance().getCategoryFromIdentifier(metadata.substring(14));
+            // Get category from player's current market
+            Market playerMarket = MarketMenuManager.getInstance().getPlayerMarket(player);
+            if (playerMarket == null) playerMarket = MarketsManager.getInstance().getDefaultMarket();
+
+            Category category = playerMarket != null ? playerMarket.getCategoryFromIdentifier(metadata.substring(14)) : MarketManager.getInstance().getCategoryFromIdentifier(metadata.substring(14));
 
             if (category == null) return;
 
@@ -110,7 +116,11 @@ public class InventoryListener implements Listener {
 
         if (metadata.startsWith("item-menu-")) {
 
-            Item item = MarketManager.getInstance().getItem(metadata.substring(10));
+            // Get item from player's current market
+            Market playerMarket = MarketMenuManager.getInstance().getPlayerMarket(player);
+            if (playerMarket == null) playerMarket = MarketsManager.getInstance().getDefaultMarket();
+
+            Item item = playerMarket != null ? playerMarket.getItem(metadata.substring(10)) : MarketManager.getInstance().getItem(metadata.substring(10));
 
             if (item == null) return;
 
@@ -155,9 +165,7 @@ public class InventoryListener implements Listener {
 
             if (config.getInfoBuySellEnabled() && config.getInfoBuySellSlot() == slot) {
 
-                Item itemToPlot = MarketManager.getInstance().getItem(metadata.substring(10));
-
-                MarketMenuManager.getInstance().setMenuOfPlayer(player, new InfoMenu(player, itemToPlot));
+                MarketMenuManager.getInstance().setMenuOfPlayer(player, new InfoMenu(player, item));
 
                 return;
             }
@@ -222,17 +230,15 @@ public class InventoryListener implements Listener {
 
             if (config.getLimitOrdersEnabled() && config.getLimitOrdersBuySellEnabled() && config.getLimitOrdersBuySellSlot() == slot) {
 
-                Item limitItem = MarketManager.getInstance().getItem(metadata.substring(10));
-
                 List<LimitOrder> orders = LimitOrdersManager.getInstance().getPlayerLimitOrders(player.getUniqueId());
 
                 LimitOrder order = null;
 
                 for (LimitOrder limitOrder : orders)
-                    if (limitOrder.getItem().equals(limitItem)) order = limitOrder;
+                    if (limitOrder.getItem().equals(item)) order = limitOrder;
 
                 if (order == null)  {
-                    MarketMenuManager.getInstance().setMenuOfPlayer(player, new SetLimitOrderMenu(player, limitItem));
+                    MarketMenuManager.getInstance().setMenuOfPlayer(player, new SetLimitOrderMenu(player, item));
                     return;
                 }
 
@@ -321,7 +327,11 @@ public class InventoryListener implements Listener {
 
         if (metadata.startsWith("set-limit-order-")) {
 
-            Item item = MarketManager.getInstance().getItem(metadata.substring(16));
+            // Get item from player's current market
+            Market limitMarket = MarketMenuManager.getInstance().getPlayerMarket(player);
+            if (limitMarket == null) limitMarket = MarketsManager.getInstance().getDefaultMarket();
+
+            Item item = limitMarket != null ? limitMarket.getItem(metadata.substring(16)) : MarketManager.getInstance().getItem(metadata.substring(16));
 
             SetLimitOrderMenu menu = (SetLimitOrderMenu) MarketMenuManager.getInstance().getMenuFromPlayer(player);
 
@@ -518,7 +528,11 @@ public class InventoryListener implements Listener {
                     return;
                 }
 
-                List<Category> categories = MarketManager.getInstance().getCategories();
+                // Get categories from player's current market
+                Market mainMenuMarket = MarketMenuManager.getInstance().getPlayerMarket(player);
+                if (mainMenuMarket == null) mainMenuMarket = MarketsManager.getInstance().getDefaultMarket();
+
+                List<Category> categories = mainMenuMarket != null ? mainMenuMarket.getCategories() : MarketManager.getInstance().getCategories();
 
                 List<Integer> categorySlots = Config.getInstance().getCategoriesSlots();
 

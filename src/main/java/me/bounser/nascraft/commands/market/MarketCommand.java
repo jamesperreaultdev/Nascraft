@@ -5,7 +5,9 @@ import me.bounser.nascraft.commands.Command;
 import me.bounser.nascraft.config.lang.Lang;
 import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.inventorygui.*;
+import me.bounser.nascraft.market.Market;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.config.Config;
 import me.bounser.nascraft.market.resources.Category;
 import me.bounser.nascraft.market.unit.Item;
@@ -43,14 +45,27 @@ public class MarketCommand extends Command {
                 return;
             }
 
+            // /market [marketId] - opens specific market or default
             if (args.length == 0 && player.hasPermission("nascraft.market.gui")) {
                 MarketMenuManager.getInstance().openMenu(player);
                 return;
             }
 
+            // Check if first arg is a market ID
+            if (args.length >= 1 && player.hasPermission("nascraft.market.gui")) {
+                Market market = MarketsManager.getInstance().getMarket(args[0]);
+                if (market != null) {
+                    MarketMenuManager.getInstance().openMenu(player, market);
+                    return;
+                }
+            }
+
             if (args.length == 2 && args[0].equalsIgnoreCase("category") && player.hasPermission("nascraft.market.gui")) {
 
-                Category category = MarketManager.getInstance().getCategoryFromIdentifier(args[1]);
+                Market market = MarketMenuManager.getInstance().getPlayerMarket(player);
+                if (market == null) market = MarketsManager.getInstance().getDefaultMarket();
+
+                Category category = market != null ? market.getCategoryFromIdentifier(args[1]) : MarketManager.getInstance().getCategoryFromIdentifier(args[1]);
 
                 if (category == null) {
                     Lang.get().message(player, Message.MARKET_CMD_INVALID_CATEGORY);
@@ -63,7 +78,10 @@ public class MarketCommand extends Command {
 
             if (args.length == 2 && args[0].equalsIgnoreCase("item") && player.hasPermission("nascraft.market.gui")) {
 
-                Item item = MarketManager.getInstance().getItem(args[1].toLowerCase());
+                Market market = MarketMenuManager.getInstance().getPlayerMarket(player);
+                if (market == null) market = MarketsManager.getInstance().getDefaultMarket();
+
+                Item item = market != null ? market.getItem(args[1].toLowerCase()) : MarketManager.getInstance().getItem(args[1].toLowerCase());
 
                 if (item == null) {
                     Lang.get().message(player, Message.MARKET_CMD_INVALID_ITEM);
@@ -118,6 +136,7 @@ public class MarketCommand extends Command {
 
         } else {
 
+            // Console command: /market <player> - open default market for player
             if (args.length == 1) {
 
                 Player player = Bukkit.getPlayer(args[0]);
@@ -127,7 +146,30 @@ public class MarketCommand extends Command {
                     return;
                 }
 
-                MarketMenuManager.getInstance().setMenuOfPlayer(player, new MainMenu(player));
+                MarketMenuManager.getInstance().openMenu(player);
+                return;
+            }
+
+            // Console command: /market open <player> <marketId> - open specific market for player
+            if (args.length == 3 && args[0].equalsIgnoreCase("open")) {
+
+                Player player = Bukkit.getPlayer(args[1]);
+
+                if (player == null) {
+                    Nascraft.getInstance().getLogger().info(ChatColor.RED + "Invalid player: " + args[1]);
+                    return;
+                }
+
+                Market market = MarketsManager.getInstance().getMarket(args[2]);
+
+                if (market == null) {
+                    Nascraft.getInstance().getLogger().info(ChatColor.RED + "Invalid market: " + args[2]);
+                    Nascraft.getInstance().getLogger().info("Available markets: " + MarketsManager.getInstance().getAllMarketIds());
+                    return;
+                }
+
+                MarketMenuManager.getInstance().openMenu(player, market);
+                Nascraft.getInstance().getLogger().info("Opened market '" + market.getDisplayName() + "' for " + player.getName());
                 return;
             }
 
@@ -152,7 +194,11 @@ public class MarketCommand extends Command {
             }
 
             if (args.length != 4) {
-                Nascraft.getInstance().getLogger().info(ChatColor.RED  + "Invalid use of command. \n(CONSOLE) /market <Buy/Sell> <Material> <Quantity> <Player>\n(CONSOLE) /market category <category-identifier> <Player>\n(CONSOLE) /market <Player>");
+                Nascraft.getInstance().getLogger().info(ChatColor.RED  + "Invalid use of command.");
+                Nascraft.getInstance().getLogger().info("(CONSOLE) /market <Player> - Open default market");
+                Nascraft.getInstance().getLogger().info("(CONSOLE) /market open <Player> <MarketId> - Open specific market");
+                Nascraft.getInstance().getLogger().info("(CONSOLE) /market category <category-identifier> <Player>");
+                Nascraft.getInstance().getLogger().info("(CONSOLE) /market <Buy/Sell> <Material> <Quantity> <Player>");
                 return;
             }
 
@@ -182,10 +228,25 @@ public class MarketCommand extends Command {
 
         switch (args.length) {
             case 1:
-                return StringUtil.copyPartialMatches(args[0], Arrays.asList("buy", "sell"), new ArrayList<>());
+                List<String> options = new ArrayList<>(Arrays.asList("buy", "sell", "category", "item", "open"));
+                // Add market IDs to suggestions
+                options.addAll(MarketsManager.getInstance().getAllMarketIds());
+                return StringUtil.copyPartialMatches(args[0], options, new ArrayList<>());
             case 2:
+                if (args[0].equalsIgnoreCase("open")) {
+                    // Tab complete player names for /market open <player>
+                    List<String> playerNames = new ArrayList<>();
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        playerNames.add(player.getName());
+                    }
+                    return StringUtil.copyPartialMatches(args[1], playerNames, new ArrayList<>());
+                }
                 return StringUtil.copyPartialMatches(args[1], MarketManager.getInstance().getAllItemsAndChildsIdentifiers(), new ArrayList<>());
             case 3:
+                if (args[0].equalsIgnoreCase("open")) {
+                    // Tab complete market IDs for /market open <player> <marketId>
+                    return StringUtil.copyPartialMatches(args[2], new ArrayList<>(MarketsManager.getInstance().getAllMarketIds()), new ArrayList<>());
+                }
                 return Collections.singletonList("quantity");
         }
 

@@ -41,6 +41,8 @@ public class DebtManager {
 
                     HashMap<UUID, Double> debtors = DatabaseManager.get().getDatabase().getUUIDAndDebt();
 
+                    if (debtors == null) return;
+
                     for (UUID debtorUUID : debtors.keySet()) {
 
                         Player player = Bukkit.getPlayer(debtorUUID);
@@ -68,6 +70,8 @@ public class DebtManager {
                 () -> {
 
                     HashMap<UUID, Double> debtors = DatabaseManager.get().getDatabase().getUUIDAndDebt();
+
+                    if (debtors == null) return;
 
                     for (UUID debtorUUID : debtors.keySet()) {
                         double interest = Math.max(debtors.get(debtorUUID) * Config.getInstance().getLoansDailyInterest(), Config.getInstance().getLoansMinimumInterest());

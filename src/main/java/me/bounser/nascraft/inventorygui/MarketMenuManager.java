@@ -6,6 +6,8 @@ import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.formatter.Formatter;
 import me.bounser.nascraft.formatter.RoundUtils;
 import me.bounser.nascraft.formatter.Style;
+import me.bounser.nascraft.market.Market;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.market.resources.Category;
 import me.bounser.nascraft.market.unit.Item;
 import net.kyori.adventure.platform.bukkit.BukkitComponentSerializer;
@@ -16,23 +18,73 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.metadata.FixedMetadataValue;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import me.bounser.nascraft.Nascraft;
 
 public class MarketMenuManager {
 
     private static MarketMenuManager instance;
 
     private HashMap<Player, MenuPage> playerMenus = new HashMap<>();
+    private HashMap<Player, String> playerMarkets = new HashMap<>();
 
     public static MarketMenuManager getInstance() { return instance == null ? instance = new MarketMenuManager() : instance; }
 
+    /**
+     * Opens the default market menu (for backwards compatibility)
+     */
     public void openMenu(Player player) {
+        Market defaultMarket = MarketsManager.getInstance().getDefaultMarket();
+        if (defaultMarket != null) {
+            openMenu(player, defaultMarket);
+        } else {
+            new MainMenu(player);
+        }
+    }
 
-        new MainMenu(player);
+    /**
+     * Opens a specific market menu
+     */
+    public void openMenu(Player player, Market market) {
+        // Store the current market for this player
+        playerMarkets.put(player, market.getMarketId());
+        player.setMetadata("NascraftMarket", new FixedMetadataValue(Nascraft.getInstance(), market.getMarketId()));
 
+        new MainMenu(player, market);
+    }
+
+    /**
+     * Gets the current market for a player
+     */
+    public Market getPlayerMarket(Player player) {
+        String marketId = playerMarkets.get(player);
+        if (marketId != null) {
+            return MarketsManager.getInstance().getMarket(marketId);
+        }
+        // Fallback to default market
+        return MarketsManager.getInstance().getDefaultMarket();
+    }
+
+    /**
+     * Gets the current market ID for a player
+     */
+    public String getPlayerMarketId(Player player) {
+        return playerMarkets.getOrDefault(player, "default");
+    }
+
+    /**
+     * Clears player market data when they close menu
+     */
+    public void clearPlayerMarket(Player player) {
+        playerMarkets.remove(player);
+        if (player.hasMetadata("NascraftMarket")) {
+            player.removeMetadata("NascraftMarket", Nascraft.getInstance());
+        }
     }
 
     public void setMenuOfPlayer(Player player, MenuPage menu) {

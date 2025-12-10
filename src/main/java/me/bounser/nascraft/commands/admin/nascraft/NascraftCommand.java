@@ -13,6 +13,7 @@ import me.bounser.nascraft.managers.DebtManager;
 import me.bounser.nascraft.managers.currencies.CurrenciesManager;
 import me.bounser.nascraft.managers.currencies.Currency;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.market.unit.Item;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -162,7 +163,11 @@ public class NascraftCommand extends Command {
 
                 sender.sendMessage(ChatColor.DARK_PURPLE + "[NC] " + ChatColor.GRAY + "Lang reloaded. Using: " + Config.getInstance().getSelectedLanguage());
 
+                // Reload multi-market system
+                MarketsManager.getInstance().reload();
+
                 sender.sendMessage(ChatColor.DARK_PURPLE + "[NC] " + ChatColor.GRAY + "Reloaded! " +
+                        MarketsManager.getInstance().getAllMarkets().size() + " markets with " +
                         MarketManager.getInstance().getAllItems().size() + " items (" +
                         MarketManager.getInstance().getAllParentItems().size() + " parents and " + (MarketManager.getInstance().getAllItems().size() - MarketManager.getInstance().getAllParentItems().size()) +
                         " childs) within " + Config.getInstance().getCategories().size() + " categories.");

@@ -159,6 +159,23 @@ public class MySQL implements Database {
         return 0;
     }
 
+    // Multi-market support methods
+    @Override
+    public void saveItem(Item item, String marketId) {
+        // TODO: Implement multi-market support for MySQL
+    }
+
+    @Override
+    public void retrieveItem(Item item, String marketId) {
+        // TODO: Implement multi-market support for MySQL
+    }
+
+    @Override
+    public float retrieveLastPrice(Item item, String marketId) {
+        // TODO: Implement multi-market support for MySQL
+        return 0;
+    }
+
     @Override
     public void saveTrade(Trade trade) {
 

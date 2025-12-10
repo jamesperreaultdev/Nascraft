@@ -6,7 +6,9 @@ import me.bounser.nascraft.config.lang.Lang;
 import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.discord.alerts.DiscordAlerts;
 import me.bounser.nascraft.discord.linking.LinkManager;
+import me.bounser.nascraft.market.Market;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.market.limitorders.LimitOrder;
 import me.bounser.nascraft.market.limitorders.LimitOrdersManager;
 import me.bounser.nascraft.market.resources.Category;
@@ -30,11 +32,26 @@ import java.util.List;
 public class MainMenu implements MenuPage {
 
     private final Player player;
+    private final Market market;
 
     private Inventory gui;
 
+    /**
+     * Constructor for backwards compatibility (uses default market)
+     */
     public MainMenu(Player player) {
         this.player = player;
+        this.market = MarketsManager.getInstance().getDefaultMarket();
+
+        open();
+    }
+
+    /**
+     * Constructor with specific market
+     */
+    public MainMenu(Player player, Market market) {
+        this.player = player;
+        this.market = market;
 
         open();
     }
@@ -44,7 +61,12 @@ public class MainMenu implements MenuPage {
 
         Config config = Config.getInstance();
 
-        Component title = MiniMessage.miniMessage().deserialize(Lang.get().message(Message.GUI_MAIN_MENU_TITLE));
+        // Include market name in title if not default
+        String titleStr = Lang.get().message(Message.GUI_MAIN_MENU_TITLE);
+        if (market != null && !market.getMarketId().equals("default")) {
+            titleStr = market.getDisplayName() + " - " + titleStr;
+        }
+        Component title = MiniMessage.miniMessage().deserialize(titleStr);
 
         gui = Bukkit.createInventory(null, config.getMainMenuSize(), BukkitComponentSerializer.legacy().serialize(title));
 
@@ -177,14 +199,14 @@ public class MainMenu implements MenuPage {
 
         // Trends
 
-        if (config.getTrendsEnabled()) {
+        if (config.getTrendsEnabled() && market != null) {
 
             Component trends = MiniMessage.miniMessage().deserialize(Lang.get().message(Message.GUI_TRENDS_NAME));
 
-            List<Item> moreMoved = MarketManager.getInstance().getMostTraded(3);
+            List<Item> moreMoved = market.getMostTraded(3);
 
             String trendsLore = Lang.get().message(Message.GUI_TRENDS_LORE)
-                            .replace("[POPULAR]", MarketManager.getInstance().getMostTraded(1).get(0).getTaggedName());
+                            .replace("[POPULAR]", market.getMostTraded(1).isEmpty() ? "N/A" : market.getMostTraded(1).get(0).getTaggedName());
 
             int i = 1;
 
@@ -232,7 +254,7 @@ public class MainMenu implements MenuPage {
 
         // Categories
 
-        List<Category> categories = MarketManager.getInstance().getCategories();
+        List<Category> categories = market != null ? market.getCategories() : MarketManager.getInstance().getCategories();
 
         int j = 0;
 

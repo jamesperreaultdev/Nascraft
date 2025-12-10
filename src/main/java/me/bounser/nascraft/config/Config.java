@@ -11,7 +11,9 @@ import me.bounser.nascraft.sellwand.Wand;
 import me.bounser.nascraft.managers.currencies.Currency;
 import me.bounser.nascraft.discord.linking.LinkingMethod;
 import me.bounser.nascraft.market.resources.Category;
+import me.bounser.nascraft.market.Market;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.market.unit.Item;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -687,6 +689,47 @@ public class Config {
         return childs;
     }
 
+    /**
+     * Gets child items for a specific market
+     * Used by multi-market system
+     */
+    public List<Item> getChilds(String identifier, String marketId) {
+
+        List<Item> childs = new ArrayList<>();
+
+        Set<String> section = null;
+
+        if (items.getConfigurationSection("items." + identifier + ".child.") != null) {
+            section = items.getConfigurationSection("items." + identifier + ".child.").getKeys(false);
+        }
+
+        Market market = MarketsManager.getInstance().getMarket(marketId);
+        if (market == null) return childs;
+
+        Item parent = market.getItem(identifier);
+        if (parent == null) return childs;
+
+        if (section == null || section.isEmpty()) return childs;
+
+        for (String childIdentifier : section) {
+
+            ItemStack itemStack = getItemStackOfChild(identifier, childIdentifier);
+            float multiplier = (float) items.getDouble("items." + identifier + ".child." + childIdentifier + ".multiplier");
+
+            String alias = childIdentifier;
+
+            if (items.contains("items." + identifier + ".child." + childIdentifier + ".alias")) {
+                alias = items.getString("items." + identifier + ".child." + childIdentifier + ".alias");
+            } else {
+                alias = (Character.toUpperCase(alias.charAt(0)) + alias.substring(1)).replace("_", " ");
+            }
+
+            childs.add(new Item(parent, multiplier, itemStack, childIdentifier, alias, parent.getCurrency()));
+        }
+
+        return childs;
+    }
+
     public ItemStack getItemStackOfItem(String identifier) {
 
         ItemStack itemStack = null;
@@ -825,6 +868,20 @@ public class Config {
         return 60;
     }
 
+    public int getStockRestockMinMinutes() {
+        if (config.contains("market-control.stock-restock.min-minutes")) {
+            return config.getInt("market-control.stock-restock.min-minutes");
+        }
+        return 30; // Default 30 minutes minimum
+    }
+
+    public int getStockRestockMaxMinutes() {
+        if (config.contains("market-control.stock-restock.max-minutes")) {
+            return config.getInt("market-control.stock-restock.max-minutes");
+        }
+        return 120; // Default 2 hours maximum
+    }
+
     public int getStockRestockWarningMinutes() {
         if (config.contains("market-control.stock-restock.warning-minutes")) {
             return config.getInt("market-control.stock-restock.warning-minutes");
@@ -899,6 +956,21 @@ public class Config {
             if (categories.contains("categories." + category.getIdentifier() + ".items")) {
                 if (categories.getList("categories." + category.getIdentifier() + ".items").contains(identifier)) {
                     return category;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Gets the category identifier for a material from config (without needing MarketManager)
+     * Used by multi-market system
+     */
+    public String getCategoryOfMaterial(String identifier) {
+        for (String categoryId : getCategories()) {
+            if (categories.contains("categories." + categoryId + ".items")) {
+                if (categories.getList("categories." + categoryId + ".items").contains(identifier)) {
+                    return categoryId;
                 }
             }
         }

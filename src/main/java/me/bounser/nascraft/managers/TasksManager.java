@@ -8,7 +8,9 @@ import me.bounser.nascraft.database.DatabaseManager;
 import me.bounser.nascraft.discord.alerts.DiscordAlerts;
 import me.bounser.nascraft.discord.DiscordBot;
 import me.bounser.nascraft.discord.DiscordLog;
+import me.bounser.nascraft.market.Market;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.MarketsManager;
 import me.bounser.nascraft.market.unit.stats.Instant;
 import me.bounser.nascraft.market.unit.Item;
 import me.bounser.nascraft.config.Config;
@@ -22,12 +24,14 @@ import org.bukkit.plugin.Plugin;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Random;
 
 public class TasksManager {
 
     public static TasksManager instance;
 
     private final int ticksPerSecond = 20;
+    private final Random random = new Random();
 
     private final Plugin AGUI = Bukkit.getPluginManager().getPlugin("AdvancedGUI");
 
@@ -170,39 +174,82 @@ public class TasksManager {
     private void stockRestockTask() {
         if (!Config.getInstance().getStockRestockEnabled()) return;
 
-        int intervalMinutes = Config.getInstance().getStockRestockIntervalMinutes();
-        int warningMinutes = Config.getInstance().getStockRestockWarningMinutes();
-        int restockAmount = Config.getInstance().getStockRestockAmount();
+        // Schedule restock for the legacy single market
+        scheduleMarketRestock(null);
 
-        long intervalTicks = (long) intervalMinutes * 60 * ticksPerSecond;
-        long warningTicks = (long) warningMinutes * 60 * ticksPerSecond;
+        // Schedule restock for each multi-market independently
+        for (Market market : MarketsManager.getInstance().getAllMarkets()) {
+            scheduleMarketRestock(market);
+        }
+    }
 
-        // Schedule the warning task (runs warningMinutes before the restock)
-        if (warningMinutes > 0 && warningMinutes < intervalMinutes) {
-            long warningDelay = intervalTicks - warningTicks;
+    /**
+     * Schedules a restock for a specific market with random interval.
+     * @param market The market to restock, or null for the legacy single market
+     */
+    private void scheduleMarketRestock(Market market) {
+        int minMinutes;
+        int maxMinutes;
 
-            Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
-                // Broadcast warning to all online players
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    Lang.get().message(player, Message.STOCK_RESTOCK_WARNING, "[MINUTES]", String.valueOf(warningMinutes));
-                }
-            }, warningDelay, intervalTicks);
+        if (market != null) {
+            minMinutes = market.getEffectiveRestockMinMinutes();
+            maxMinutes = market.getEffectiveRestockMaxMinutes();
+        } else {
+            minMinutes = Config.getInstance().getStockRestockMinMinutes();
+            maxMinutes = Config.getInstance().getStockRestockMaxMinutes();
         }
 
-        // Schedule the actual restock task
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
-            // Add stock to all parent items (using per-item restock amount)
-            for (Item item : MarketManager.getInstance().getAllParentItems()) {
-                int itemRestockAmount = Config.getInstance().getItemRestockAmount(item.getIdentifier());
-                item.addStock(itemRestockAmount);
+        // Calculate random interval between min and max
+        int intervalMinutes = minMinutes + random.nextInt(Math.max(1, maxMinutes - minMinutes + 1));
+        long intervalTicks = (long) intervalMinutes * 60 * ticksPerSecond;
+
+        String marketName = market != null ? market.getDisplayName() : "Legacy Market";
+
+        Bukkit.getScheduler().runTaskLaterAsynchronously(Nascraft.getInstance(), () -> {
+            // Perform the restock
+            if (market != null) {
+                // Multi-market restock
+                int totalRestocked = 0;
+                for (Item item : market.getAllParentItems()) {
+                    int itemRestockAmount = market.getEffectiveRestockAmount(item.getIdentifier());
+                    item.addStock(itemRestockAmount);
+                    totalRestocked += itemRestockAmount;
+                }
+
+                // Broadcast restock complete (must run on main thread)
+                final int finalTotal = totalRestocked;
+                Bukkit.getScheduler().runTask(Nascraft.getInstance(), () -> {
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        Lang.get().message(player, Message.STOCK_RESTOCK_COMPLETE,
+                                "[AMOUNT]", String.valueOf(finalTotal),
+                                "[MARKET]", market.getDisplayName());
+                    }
+                });
+            } else {
+                // Legacy single market restock
+                int totalRestocked = 0;
+                for (Item item : MarketManager.getInstance().getAllParentItems()) {
+                    int itemRestockAmount = Config.getInstance().getItemRestockAmount(item.getIdentifier());
+                    item.addStock(itemRestockAmount);
+                    totalRestocked += itemRestockAmount;
+                }
+
+                // Broadcast restock complete (must run on main thread)
+                final int finalTotal = totalRestocked;
+                Bukkit.getScheduler().runTask(Nascraft.getInstance(), () -> {
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        Lang.get().message(player, Message.STOCK_RESTOCK_COMPLETE,
+                                "[AMOUNT]", String.valueOf(finalTotal),
+                                "[MARKET]", "Market");
+                    }
+                });
             }
 
-            // Broadcast restock complete to all online players (must run on main thread)
-            Bukkit.getScheduler().runTask(Nascraft.getInstance(), () -> {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    Lang.get().message(player, Message.STOCK_RESTOCK_COMPLETE, "[AMOUNT]", String.valueOf(restockAmount));
-                }
-            });
-        }, intervalTicks, intervalTicks);
+            // Schedule the next restock with a new random interval
+            scheduleMarketRestock(market);
+
+        }, intervalTicks);
+
+        Nascraft.getInstance().getLogger().info("[Restock] " + marketName + " scheduled in " + intervalMinutes + " minutes");
     }
 }
