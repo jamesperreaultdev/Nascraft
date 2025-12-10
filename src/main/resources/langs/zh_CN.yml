@@ -26,6 +26,10 @@ not_enough_space: "<gradient:#FB6363:#C4B3FD>✘ 背包空间不足！</gradient
 top_limit_reached: "<gradient:#FB6363:#C4B3FD>✘ 无人愿意出售此物品！</gradient> <color:#a84b34>（已达最高限价）</color>"
 bottom_limit_reached: "<gradient:#FB6363:#C4B3FD>✘ 无人愿意购买此物品！</gradient> <color:#a84b34>（已达最低限价）</color>"
 shop_closed: "<gradient:#FB6363:#C4B3FD>✘ 购买错误：商店已关闭</gradient>"
+market_stock_full: "<gradient:#FB6363:#C4B3FD>✘ 市场只能再购买 [STOCK] 个 [NAME]！</gradient>"
+gui_stock_display: "<color:#ffae2b>库存: [STOCK]</color>"
+stock_restock_warning: "<gradient:#ffae2b:#ff6b00>市场库存将在 [MINUTES] 分钟后补充！</gradient>"
+stock_restock_complete: "<gradient:#00ff6b:#00ffae>市场已补货！所有物品增加了 +[AMOUNT] 库存。</gradient>"
 
 # 命令相关
 no_permission: "<gradient:#FB6363:#C4B3FD>✘ 权限不足。</gradient>"

@@ -1,5 +1,6 @@
 package me.bounser.nascraft.inventorygui;
 
+import me.bounser.nascraft.config.Config;
 import me.bounser.nascraft.config.lang.Lang;
 import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.formatter.Formatter;
@@ -99,6 +100,15 @@ public class MarketMenuManager {
         for (String line : itemLore.split("\\n")) {
             Component loreSegment = MiniMessage.miniMessage().deserialize(line);
             itemLoreLines.add(BukkitComponentSerializer.legacy().serialize(loreSegment));
+        }
+
+        // Add stock display if stock system is enabled
+        Item stockItem = item.getParent() != null ? item.getParent() : item;
+        if (Config.getInstance().getStockRestockEnabled()) {
+            String stockLore = Lang.get().message(Message.GUI_STOCK_DISPLAY)
+                    .replace("[STOCK]", String.valueOf(stockItem.getStock()));
+            Component stockComponent = MiniMessage.miniMessage().deserialize(stockLore);
+            itemLoreLines.add(BukkitComponentSerializer.legacy().serialize(stockComponent));
         }
 
         return itemLoreLines;

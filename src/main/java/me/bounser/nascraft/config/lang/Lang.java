@@ -98,6 +98,13 @@ public class Lang {
                 .replace(placeholder, replacement)));
     }
 
+    public void message(Player player, Message lang, String placeholder1, String replacement1, String placeholder2, String replacement2) {
+
+        audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())
+                .replace(placeholder1, replacement1)
+                .replace(placeholder2, replacement2)));
+    }
+
     public void message(Player player, Message lang, String placeholder1, String replacement1, String placeholder2, String replacement2, String placeholder3, String replacement3) {
 
         audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())

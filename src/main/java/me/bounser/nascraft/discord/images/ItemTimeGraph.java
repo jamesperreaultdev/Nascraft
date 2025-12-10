@@ -19,7 +19,8 @@ public class ItemTimeGraph {
 
         graphics.drawImage(ItemChart.getImage(item, chartType, userid, 600, 250), 5, 40, null);
 
-        graphics.drawImage(item.getIcon(), 40, 0, 50, 50, null);
+        if (item.getIcon() != null)
+            graphics.drawImage(item.getIcon(), 40, 0, 50, 50, null);
 
         graphics.setFont(new Font("Arial", Font.BOLD, 23));
 

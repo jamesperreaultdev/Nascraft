@@ -39,11 +39,11 @@ public class Images {
         BufferedImage image = null;
         try {
             InputStream input = Nascraft.getInstance().getResource("1-21-4-materials/minecraft_" + material.toString().toLowerCase() + ".png");
-            assert input != null;
-            image = ImageIO.read(input);
+            if (input != null) {
+                image = ImageIO.read(input);
+            }
         } catch (IOException e) {
             Nascraft.getInstance().getLogger().info("Unable to read image: " + material.toString().toLowerCase() + ".png");
-            e.printStackTrace();
         }
         images.put(material, image);
 

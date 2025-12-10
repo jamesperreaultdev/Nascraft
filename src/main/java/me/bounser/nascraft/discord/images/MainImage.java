@@ -153,7 +153,8 @@ public class MainImage {
 
     public static void setItem(Item item, int[] offset, int intraOffset, Graphics graphics, Color color) {
 
-        graphics.drawImage(item.getIcon(), offset[0]+7+intraOffset, offset[1], 45, 45, null);
+        if (item.getIcon() != null)
+            graphics.drawImage(item.getIcon(), offset[0]+7+intraOffset, offset[1], 45, 45, null);
 
         graphics.setColor(color);
 

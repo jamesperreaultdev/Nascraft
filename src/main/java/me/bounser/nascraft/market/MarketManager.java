@@ -74,11 +74,6 @@ public class MarketManager {
 
             BufferedImage image = ImagesManager.getInstance().getImage(identifier);
 
-            if (image == null) {
-                Nascraft.getInstance().getLogger().warning("No image found for item: " + identifier);
-                continue;
-            }
-
             Item item = new Item(
                     itemStack,
                     identifier,

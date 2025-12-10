@@ -14,6 +14,8 @@ import com.zaxxer.hikari.HikariDataSource;
 
 import me.bounser.nascraft.Nascraft;
 
+import java.io.File;
+
 public class DatabaseExecutor {
 
     private static DatabaseExecutor instance;
@@ -42,7 +44,12 @@ public class DatabaseExecutor {
         this.transactionIds = new ConcurrentHashMap<>();
         this.idCounter = new AtomicLong(0);
 
-        String path = Nascraft.getInstance().getDataFolder().getPath() + "/data/sqlite.db";
+        File dataDir = new File(Nascraft.getInstance().getDataFolder(), "data");
+        if (!dataDir.exists()) {
+            dataDir.mkdirs();
+        }
+
+        String path = dataDir.getPath() + "/sqlite.db";
 
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:sqlite:" + path);

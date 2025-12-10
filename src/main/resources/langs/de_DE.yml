@@ -20,6 +20,10 @@ not_enough_space: "<gradient:#FB6363:#C4B3FD>✘ Du hast nicht genug Platz im In
 top_limit_reached: "<gradient:#FB6363:#C4B3FD>✘ Niemand will das kaufen!</gradient> <color:#a84b34>(Unterster Preis erreicht)</color>"
 bottom_limit_reached: "<gradient:#FB6363:#C4B3FD>✘ Niemand will dir das verkaufen!</gradient> <color:#a84b34>(Oberster Preis erreicht)</color>"
 shop_closed: "<gradient:#FB6363:#C4B3FD>✘ Fehler beim Kauf: Der Laden ist geschlossen</gradient>"
+market_stock_full: "<gradient:#FB6363:#C4B3FD>✘ Der Markt kann nur noch [STOCK] [NAME] kaufen!</gradient>"
+gui_stock_display: "<color:#ffae2b>Bestand: [STOCK]</color>"
+stock_restock_warning: "<gradient:#ffae2b:#ff6b00>Der Marktbestand wird in [MINUTES] Minute(n) aufgefüllt!</gradient>"
+stock_restock_complete: "<gradient:#00ff6b:#00ffae>Der Markt wurde aufgefüllt! +[AMOUNT] Bestand zu allen Artikeln hinzugefügt.</gradient>"
 
 # Befehle
 no_permission: "<gradient:#FB6363:#C4B3FD>✘ Du hast keine Berechtigung.</gradient>"

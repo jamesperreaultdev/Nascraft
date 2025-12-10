@@ -2,6 +2,8 @@ package me.bounser.nascraft.managers;
 
 import me.bounser.nascraft.Nascraft;
 import me.bounser.nascraft.advancedgui.LayoutModifier;
+import me.bounser.nascraft.config.lang.Lang;
+import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.database.DatabaseManager;
 import me.bounser.nascraft.discord.alerts.DiscordAlerts;
 import me.bounser.nascraft.discord.DiscordBot;
@@ -45,6 +47,7 @@ public class TasksManager {
         shortTermPricesTask((int) timeRemaining.getSeconds());
         hourlyTask();
         saveInstants();
+        stockRestockTask();
 
         DatabaseManager.get().getDatabase().purgeHistory();
     }
@@ -162,5 +165,44 @@ public class TasksManager {
             if (Config.getInstance().getAlertsMenuEnabled()) DatabaseManager.get().getDatabase().purgeAlerts();
 
         }, timeRemaining.getSeconds()*ticksPerSecond, 60 * 60 * ticksPerSecond); // 1 hour
+    }
+
+    private void stockRestockTask() {
+        if (!Config.getInstance().getStockRestockEnabled()) return;
+
+        int intervalMinutes = Config.getInstance().getStockRestockIntervalMinutes();
+        int warningMinutes = Config.getInstance().getStockRestockWarningMinutes();
+        int restockAmount = Config.getInstance().getStockRestockAmount();
+
+        long intervalTicks = (long) intervalMinutes * 60 * ticksPerSecond;
+        long warningTicks = (long) warningMinutes * 60 * ticksPerSecond;
+
+        // Schedule the warning task (runs warningMinutes before the restock)
+        if (warningMinutes > 0 && warningMinutes < intervalMinutes) {
+            long warningDelay = intervalTicks - warningTicks;
+
+            Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
+                // Broadcast warning to all online players
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    Lang.get().message(player, Message.STOCK_RESTOCK_WARNING, "[MINUTES]", String.valueOf(warningMinutes));
+                }
+            }, warningDelay, intervalTicks);
+        }
+
+        // Schedule the actual restock task
+        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
+            // Add stock to all parent items (using per-item restock amount)
+            for (Item item : MarketManager.getInstance().getAllParentItems()) {
+                int itemRestockAmount = Config.getInstance().getItemRestockAmount(item.getIdentifier());
+                item.addStock(itemRestockAmount);
+            }
+
+            // Broadcast restock complete to all online players (must run on main thread)
+            Bukkit.getScheduler().runTask(Nascraft.getInstance(), () -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    Lang.get().message(player, Message.STOCK_RESTOCK_COMPLETE, "[AMOUNT]", String.valueOf(restockAmount));
+                }
+            });
+        }, intervalTicks, intervalTicks);
     }
 }

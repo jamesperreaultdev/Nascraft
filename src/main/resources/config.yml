@@ -67,6 +67,21 @@ market-control:
 
   # If market is closed players won't be able to buy/sell.
   closed: false
+
+  # Stock system - limits how much players can sell to the market
+  # When players sell items, the market's stock decreases.
+  # When players buy items, the market's stock increases.
+  stock-restock:
+    # Enable/disable the stock system
+    enabled: true
+    # Default starting stock for each item
+    default-stock: 50
+    # Amount of stock to add to each item per restock
+    amount: 50
+    # How often to restock in minutes (60 = every hour)
+    interval-minutes: 60
+    # How many minutes before restock to broadcast a warning (set to 0 to disable warning)
+    warning-minutes: 1
   
   # Although taxation gets applied for buying and selling actions separately, the total tax paid is the same regardless of how it is split
   # The spread is determined by the deviation in both actions. In the default case, it is 6% for selling and 4% for buying, resulting in a total spread of 10%.

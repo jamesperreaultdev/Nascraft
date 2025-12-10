@@ -56,6 +56,9 @@ public class Item {
 
     private float collectedTaxes;
 
+    private int stock;
+    private int maxStock;
+
     private ItemStats itemStats;
 
     private final float multiplier;
@@ -99,6 +102,9 @@ public class Item {
         operations = 0;
         multiplier = 1;
         parent = null;
+
+        this.maxStock = 0; // No max stock limit
+        this.stock = Config.getInstance().getItemStartingStock(identifier);
 
         itemStats = new ItemStats(this);
     }
@@ -188,6 +194,13 @@ public class Item {
             return 0;
         }
 
+        // Check stock limit (market can only sell if it has stock)
+        Item stockItem = parent != null ? parent : this;
+        if (Config.getInstance().getStockRestockEnabled() && stockItem.stock < amount) {
+            if (player != null && feedback) Lang.get().message(player, Message.MARKET_STOCK_FULL, "[STOCK]", String.valueOf(stockItem.stock), "[NAME]", stockItem.taggedAlias);
+            return 0;
+        }
+
         BuyItemEvent event = new BuyItemEvent(player, this, amount);
         Bukkit.getPluginManager().callEvent(event);
 
@@ -221,6 +234,11 @@ public class Item {
                         price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
         }
 
+        // Decrease stock when player buys from market
+        if (Config.getInstance().getStockRestockEnabled()) {
+            stockItem.addStock((int) (-amount * multiplier));
+        }
+
         Trade trade = new Trade(this, LocalDateTime.now(), worth, amount, true, false, uuid);
 
         DatabaseManager.get().getDatabase().saveTrade(trade);
@@ -246,6 +264,12 @@ public class Item {
             return 0;
         }
 
+        // Check stock limit (market can only sell if it has stock)
+        Item stockItem = parent != null ? parent : this;
+        if (Config.getInstance().getStockRestockEnabled() && stockItem.stock < amount) {
+            return 0;
+        }
+
         BuyItemEvent event = new BuyItemEvent(player, this, amount);
         Bukkit.getPluginManager().callEvent(event);
 
@@ -266,6 +290,11 @@ public class Item {
                         amount*price.getValue(),
                         -amount*multiplier,
                         price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
+        }
+
+        // Decrease stock when player buys from market
+        if (Config.getInstance().getStockRestockEnabled()) {
+            stockItem.addStock((int) (-amount * multiplier));
         }
 
         Trade trade = new Trade(this, LocalDateTime.now(), worth, amount, true, false, uuid);
@@ -342,6 +371,12 @@ public class Item {
                         price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
         }
 
+        // Increase stock when player sells to market
+        Item stockItem = parent != null ? parent : this;
+        if (Config.getInstance().getStockRestockEnabled()) {
+            stockItem.addStock((int) (amount * multiplier));
+        }
+
         MoneyManager.getInstance().deposit(offlinePlayer, currency, worth, price.getSellTaxMultiplier());
 
         worth = RoundUtils.round(worth);
@@ -397,6 +432,12 @@ public class Item {
                         amount*price.getValue(),
                         amount*multiplier,
                         price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
+        }
+
+        // Increase stock when player sells to market
+        Item stockItem = parent != null ? parent : this;
+        if (Config.getInstance().getStockRestockEnabled()) {
+            stockItem.addStock((int) (amount * multiplier));
         }
 
         worth = RoundUtils.round(worth);
@@ -511,6 +552,18 @@ public class Item {
     public BufferedImage getIcon() { return icon; }
 
     public boolean isPriceRestricted() { return restricted; }
+
+    public int getStock() { return stock; }
+
+    public int getMaxStock() { return maxStock; }
+
+    public void setStock(int stock) { this.stock = Math.max(0, stock); }
+
+    public void addStock(int amount) { this.stock = Math.max(0, stock + amount); }
+
+    public boolean hasStock() { return stock > 0; }
+
+    public boolean canBuyAmount(int amount) { return stock >= amount; }
 
     public double getChangeLastDay() {
         Instant firstInstant = DatabaseManager.get().getDatabase().getDayPrices(this).get(0);

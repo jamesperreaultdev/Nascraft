@@ -26,6 +26,16 @@ not_enough_space: "<gradient:#FB6363:#C4B3FD>✘ Not enough space in inventory!<
 top_limit_reached: "<gradient:#FB6363:#C4B3FD>✘ No one wants to sell you that!</gradient> <color:#a84b34>(Top price reached)</color>"
 bottom_limit_reached: "<gradient:#FB6363:#C4B3FD>✘ No one wants to buy that!</gradient> <color:#a84b34>(Bottom price reached)</color>"
 shop_closed: "<gradient:#FB6363:#C4B3FD>✘ Error while buying: Shop is closed</gradient>"
+# Available placeholders: [STOCK], [NAME]
+market_stock_full: "<gradient:#FB6363:#C4B3FD>✘ The market only has [STOCK] [NAME] in stock!</gradient>"
+# Available placeholders: [STOCK]
+gui_stock_display: "<color:#ffae2b>Stock: [STOCK]</color>"
+
+# Stock restock broadcast messages
+# Available placeholders: [MINUTES]
+stock_restock_warning: "<gradient:#ffae2b:#ff6b00>The market stock will be restocked in [MINUTES] minute(s)!</gradient>"
+# Available placeholders: [AMOUNT]
+stock_restock_complete: "<gradient:#00ff6b:#00ffae>The market has been restocked! +[AMOUNT] stock added to all items.</gradient>"
 
 # Commands
 no_permission: "<gradient:#FB6363:#C4B3FD>✘ Permission required.</gradient>"

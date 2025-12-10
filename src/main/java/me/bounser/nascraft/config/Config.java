@@ -773,6 +773,65 @@ public class Config {
         return (float) config.getDouble("price-options.noise.default-intensity");
     }
 
+    public int getMaxStock(String identifier) {
+        if (items.contains("items." + identifier + ".max-stock")) {
+            return items.getInt("items." + identifier + ".max-stock");
+        }
+        if (config.contains("market-control.default-max-stock")) {
+            return config.getInt("market-control.default-max-stock");
+        }
+        return 0; // 0 means unlimited
+    }
+
+    public int getDefaultStock() {
+        if (config.contains("market-control.stock-restock.default-stock")) {
+            return config.getInt("market-control.stock-restock.default-stock");
+        }
+        return 50;
+    }
+
+    public int getItemStartingStock(String identifier) {
+        if (items.contains("items." + identifier + ".stock.starting")) {
+            return items.getInt("items." + identifier + ".stock.starting");
+        }
+        return getDefaultStock();
+    }
+
+    public int getItemRestockAmount(String identifier) {
+        if (items.contains("items." + identifier + ".stock.restock-amount")) {
+            return items.getInt("items." + identifier + ".stock.restock-amount");
+        }
+        return getStockRestockAmount();
+    }
+
+    public boolean getStockRestockEnabled() {
+        if (config.contains("market-control.stock-restock.enabled")) {
+            return config.getBoolean("market-control.stock-restock.enabled");
+        }
+        return false;
+    }
+
+    public int getStockRestockAmount() {
+        if (config.contains("market-control.stock-restock.amount")) {
+            return config.getInt("market-control.stock-restock.amount");
+        }
+        return 50;
+    }
+
+    public int getStockRestockIntervalMinutes() {
+        if (config.contains("market-control.stock-restock.interval-minutes")) {
+            return config.getInt("market-control.stock-restock.interval-minutes");
+        }
+        return 60;
+    }
+
+    public int getStockRestockWarningMinutes() {
+        if (config.contains("market-control.stock-restock.warning-minutes")) {
+            return config.getInt("market-control.stock-restock.warning-minutes");
+        }
+        return 1;
+    }
+
     public boolean getRestricted(String identifier) {
         if (items.contains("items." + identifier + ".limit.restricted")) {
             return items.getBoolean("items." + identifier + ".limit.restricted");
