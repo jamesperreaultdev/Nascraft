@@ -63,37 +63,38 @@ public class Price {
     private float yearChange;
     private float allChange;
 
-    public Price(Item item, float initialValue, float elasticity, float support, float resistance, float noiseIntensity) {
+    public Price(Item item, me.bounser.nascraft.market.GoodSettings settings) {
 
         this.item = item;
 
-        updateValue();
-        previousValue = value;
-
         precission = item.getCurrency().getDecimalPrecission();
 
-        topLimit = Config.getInstance().getHighLimit(item.getIdentifier());
+        topLimit = settings.getHighLimit();
         if (topLimit < 0) topLimit = item.getCurrency().getTopLimit();
 
-        lowLimit = Config.getInstance().getLowLimit(item.getIdentifier());
+        lowLimit = settings.getLowLimit();
         if (lowLimit < 0) lowLimit = (float) Math.max(item.getCurrency().getLowLimit(), (float) 1.0/(Math.pow(10f, precission)));
 
-        this.initialValue = initialValue;
+        this.initialValue = settings.getInitialPrice();
+
+        this.support = settings.getSupport();
+        this.resistance = settings.getResistance();
+        this.noiseIntensity = settings.getNoiseIntensity() * Config.getInstance().getNoiseMultiplier();
+        this.elasticity = settings.getElasticity() * Config.getInstance().getElasticityMultiplier();
+
+        taxBuy = settings.getBuyTaxMultiplier();
+        taxSell = settings.getSellTaxMultiplier();
+
+        upperStockThreshold = getStockFromValue(topLimit);
+        lowerStockThreshold = getStockFromValue(lowLimit);
+
+        updateValue();
+        previousValue = value;
 
         hourHigh = value;
         hourLow = value;
         dayHigh.add(hourHigh);
         dayLow.add(hourLow);
-        this.support = support;
-        this.resistance = resistance;
-        this.noiseIntensity = noiseIntensity * Config.getInstance().getNoiseMultiplier();
-        this.elasticity = elasticity * Config.getInstance().getElasticityMultiplier();
-
-        taxBuy = Config.getInstance().getTaxBuy(getItem().getIdentifier());
-        taxSell = Config.getInstance().getTaxSell(getItem().getIdentifier());
-
-        upperStockThreshold = getStockFromValue(topLimit);
-        lowerStockThreshold = getStockFromValue(lowLimit);
     }
 
     public double getValue() { return value; }

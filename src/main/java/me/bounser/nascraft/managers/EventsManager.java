@@ -9,10 +9,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import me.bounser.nascraft.database.DatabaseExecutor;
-import me.bounser.nascraft.database.commands.Balances;
-import me.bounser.nascraft.database.commands.PlayerStats;
 import me.bounser.nascraft.database.commands.UserNames;
-import me.bounser.nascraft.portfolio.PortfoliosManager;
+import me.bounser.nascraft.inventorygui.MarketMenuManager;
 
 public class EventsManager implements Listener {
 
@@ -24,21 +22,16 @@ public class EventsManager implements Listener {
 
         String txKey = "join-" + uuid;
         DatabaseExecutor.getInstance().executeIdempotent(txKey, conn -> {
-            UserNames.saveOrUpdateNick(conn, uuid, name);
-            PortfoliosManager.getInstance().savePortfolioOfPlayer(player);
+            try {
+                UserNames.saveOrUpdateNick(conn, uuid, name);
+            } catch (java.sql.SQLException e) {
+                me.bounser.nascraft.Nascraft.getInstance().getLogger().warning("Failed to save username for " + name + ": " + e.getMessage());
+            }
         });
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        UUID uuid = player.getUniqueId();
-
-        String txKey = "quit-" + uuid;
-        DatabaseExecutor.getInstance().executeIdempotent(txKey, conn -> {
-            PortfoliosManager.getInstance().savePortfolioOfPlayer(player);
-            Balances.updateBalance(conn, uuid);
-            PlayerStats.saveOrUpdatePlayerStats(conn, uuid);
-        });
+        MarketMenuManager.getInstance().clearSession(event.getPlayer());
     }
 }

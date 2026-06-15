@@ -1,27 +1,25 @@
 package me.bounser.nascraft.managers;
 
 import me.bounser.nascraft.Nascraft;
-import me.bounser.nascraft.advancedgui.LayoutModifier;
 import me.bounser.nascraft.config.lang.Lang;
 import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.database.DatabaseManager;
-import me.bounser.nascraft.discord.alerts.DiscordAlerts;
-import me.bounser.nascraft.discord.DiscordBot;
 import me.bounser.nascraft.discord.DiscordLog;
 import me.bounser.nascraft.market.MarketManager;
+import me.bounser.nascraft.market.Port;
 import me.bounser.nascraft.market.unit.stats.Instant;
 import me.bounser.nascraft.market.unit.Item;
 import me.bounser.nascraft.config.Config;
-import me.bounser.nascraft.portfolio.PortfoliosManager;
-import me.leoko.advancedgui.manager.GuiWallManager;
-import me.leoko.advancedgui.utils.GuiWallInstance;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
 
 public class TasksManager {
 
@@ -29,7 +27,9 @@ public class TasksManager {
 
     private final int ticksPerSecond = 20;
 
-    private final Plugin AGUI = Bukkit.getPluginManager().getPlugin("AdvancedGUI");
+    private final java.util.Map<String, BukkitTask> restockTasks = new java.util.HashMap<>();
+
+    private final Random random = new Random();
 
     public static TasksManager getInstance() { return instance == null ? instance = new TasksManager() : instance; }
 
@@ -40,46 +40,32 @@ public class TasksManager {
         LocalTime nextMinute = timeNow.plusMinutes(1).withSecond(0);
         Duration timeRemaining = Duration.between(timeNow, nextMinute);
 
-        // Registering tasks:
         saveDataTask();
         noiseTask((int) timeRemaining.getSeconds());
         discordTask((int) timeRemaining.getSeconds());
         shortTermPricesTask((int) timeRemaining.getSeconds());
         hourlyTask();
         saveInstants();
-        stockRestockTask();
+        scheduleRestockTasks();
 
         DatabaseManager.get().getDatabase().purgeHistory();
     }
 
+    private List<Item> allParentItems() {
+        List<Item> items = new ArrayList<>();
+        for (Port port : MarketManager.getInstance().getPorts())
+            items.addAll(port.getParentItems());
+        return items;
+    }
+
     private void shortTermPricesTask(int delay) {
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
+        Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
 
-            float allChanges = 0;
-            for (Item item : MarketManager.getInstance().getAllParentItems()) {
-                if (Config.getInstance().getPriceNoise())
-                    allChanges += item.getPrice().getChange();
-
+            for (Item item : allParentItems()) {
                 item.lowerOperations();
-
                 item.getPrice().addValueToShortTermStorage();
             }
-
-            MarketManager.getInstance().updateMarketChange1h(allChanges/MarketManager.getInstance().getAllParentItems().size());
-
-            if (AGUI != null &&
-                AGUI.isEnabled() &&
-                GuiWallManager.getInstance().getActiveInstances() != null)
-
-                for (GuiWallInstance instance : GuiWallManager.getInstance().getActiveInstances()) {
-
-                    if (instance.getLayout().getName().equals("Nascraft"))
-                        for (Player player : Bukkit.getOnlinePlayers())
-                            if (instance.getInteraction(player) != null)
-                                LayoutModifier.getInstance().updateMainPage(instance.getInteraction(player).getComponentTree(), true, player);
-
-                }
 
         }, (long) delay * ticksPerSecond, 60L * ticksPerSecond);
     }
@@ -90,51 +76,37 @@ public class TasksManager {
 
             Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
 
-                if (Config.getInstance().getDiscordMenuEnabled()) {
-                    DiscordBot.getInstance().update();
-                    DiscordAlerts.getInstance().updateAlerts();
-                }
-
                 if (Config.getInstance().getLogChannelEnabled())
                     DiscordLog.getInstance().flushBuffer();
 
-            }, (long) delay * ticksPerSecond, ((long) Config.getInstance().getUpdateTime() *  ticksPerSecond));
+            }, (long) delay * ticksPerSecond, 60L * ticksPerSecond);
         }
     }
 
     private void noiseTask(int delay) {
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
+        Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
 
-            for (Item item : MarketManager.getInstance().getAllParentItems()) {
-                if (Config.getInstance().getPriceNoise())
-                    item.getPrice().applyNoise();
+            if (!Config.getInstance().getPriceNoise()) return;
 
-            }
-        }, (long) delay * ticksPerSecond, (long) Config.getInstance().getNoiseTime() *  ticksPerSecond);
+            for (Item item : allParentItems())
+                item.getPrice().applyNoise();
+
+        }, (long) delay * ticksPerSecond, (long) Config.getInstance().getNoiseTime() * ticksPerSecond);
     }
 
     private void saveDataTask() {
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
-
-            DatabaseManager.get().getDatabase().saveEverything();
-
-            DatabaseManager.get().getDatabase().saveCPIValue(MarketManager.getInstance().getConsumerPriceIndex());
-
-            PortfoliosManager.getInstance().savePortfoliosWorthOfOnlinePlayers();
-
-            for (Player player : Bukkit.getOnlinePlayers())
-                DatabaseManager.get().getDatabase().updateBalance(player.getUniqueId());
-
-        }, 60L * 5 * ticksPerSecond, 60L * 5 * ticksPerSecond); // 5 min
+        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () ->
+                DatabaseManager.get().getDatabase().saveEverything(),
+                60L * 5 * ticksPerSecond, 60L * 5 * ticksPerSecond); // 5 min
     }
 
     private void saveInstants() {
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
+        Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
 
-            for (Item item : MarketManager.getInstance().getAllParentItems()) {
+            for (Item item : allParentItems()) {
 
                 item.getItemStats().addInstant(new Instant(
                         LocalDateTime.now(),
@@ -154,55 +126,61 @@ public class TasksManager {
         LocalTime nextHour = timeNow.plusHours(1).withMinute(0).withSecond(0);
         Duration timeRemaining = Duration.between(timeNow, nextHour);
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
+        Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
 
-            for (Item item : MarketManager.getInstance().getAllItems()) {
-                item.getPrice().restartHourLimits();
-            }
+            for (Port port : MarketManager.getInstance().getPorts())
+                for (Item item : port.getAllItems())
+                    item.getPrice().restartHourLimits();
 
             MarketManager.getInstance().setOperationsLastHour(0);
-
-            if (Config.getInstance().getAlertsMenuEnabled()) DatabaseManager.get().getDatabase().purgeAlerts();
 
         }, timeRemaining.getSeconds()*ticksPerSecond, 60 * 60 * ticksPerSecond); // 1 hour
     }
 
-    private void stockRestockTask() {
-        if (!Config.getInstance().getStockRestockEnabled()) return;
+    /**
+     * Each port restocks on its own randomized schedule, picked uniformly
+     * from [min-minutes, max-minutes] after each restock.
+     */
+    public void scheduleRestockTasks() {
+        for (Port port : MarketManager.getInstance().getPorts())
+            scheduleNextRestock(port);
+    }
 
-        int intervalMinutes = Config.getInstance().getStockRestockIntervalMinutes();
-        int warningMinutes = Config.getInstance().getStockRestockWarningMinutes();
-        int restockAmount = Config.getInstance().getStockRestockAmount();
+    public void cancelRestockTasks() {
+        for (BukkitTask task : restockTasks.values())
+            if (task != null && !task.isCancelled()) task.cancel();
+        restockTasks.clear();
+    }
 
-        long intervalTicks = (long) intervalMinutes * 60 * ticksPerSecond;
-        long warningTicks = (long) warningMinutes * 60 * ticksPerSecond;
+    private void scheduleNextRestock(Port port) {
 
-        // Schedule the warning task (runs warningMinutes before the restock)
-        if (warningMinutes > 0 && warningMinutes < intervalMinutes) {
-            long warningDelay = intervalTicks - warningTicks;
+        int min = Math.max(1, port.getRestockMinMinutes());
+        int max = Math.max(min, port.getRestockMaxMinutes());
 
-            Bukkit.getScheduler().runTaskTimer(Nascraft.getInstance(), () -> {
-                // Broadcast warning to all online players
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    Lang.get().message(player, Message.STOCK_RESTOCK_WARNING, "[MINUTES]", String.valueOf(warningMinutes));
-                }
-            }, warningDelay, intervalTicks);
+        int minutes = min + random.nextInt(max - min + 1);
+
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(Nascraft.getInstance(), () -> {
+
+            // Re-resolve: the port may have been replaced by a reload.
+            Port currentPort = MarketManager.getInstance().getPort(port.getId());
+            if (currentPort == null) return;
+
+            currentPort.restock();
+
+            if (Config.getInstance().getRestockAnnounceEnabled())
+                announceRestock(currentPort);
+
+            scheduleNextRestock(currentPort);
+
+        }, (long) minutes * 60 * ticksPerSecond);
+
+        restockTasks.put(port.getId(), task);
+    }
+
+    private void announceRestock(Port port) {
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (Config.getInstance().getRestockAnnounceGlobal() || port.isInside(player.getLocation()))
+                Lang.get().message(player, Message.PORT_RESTOCKED, "[PORT]", port.getDisplayName());
         }
-
-        // Schedule the actual restock task
-        Bukkit.getScheduler().runTaskTimerAsynchronously(Nascraft.getInstance(), () -> {
-            // Add stock to all parent items (using per-item restock amount)
-            for (Item item : MarketManager.getInstance().getAllParentItems()) {
-                int itemRestockAmount = Config.getInstance().getItemRestockAmount(item.getIdentifier());
-                item.addStock(itemRestockAmount);
-            }
-
-            // Broadcast restock complete to all online players (must run on main thread)
-            Bukkit.getScheduler().runTask(Nascraft.getInstance(), () -> {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    Lang.get().message(player, Message.STOCK_RESTOCK_COMPLETE, "[AMOUNT]", String.valueOf(restockAmount));
-                }
-            });
-        }, intervalTicks, intervalTicks);
     }
 }

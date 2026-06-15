@@ -1,0 +1,151 @@
+# Nascraft ports.yml - ${project.version}
+#
+# Each port is a local market tied to a place in the world. Players must stand
+# within its radius to trade there (/market, /sell, /sellhand, /sellall).
+#
+# Every port keeps its OWN prices and stock for the goods it trades. Prices are
+# driven by local supply: plentiful goods are cheap, scarce goods are expensive.
+# Buy where a port produces, haul it, and sell where it's in demand.
+#
+# Per-good overrides (all optional, fall back to items.yml then config.yml):
+#   initial-price, elasticity, support, resistance, noise-intensity,
+#   tax: {buy, sell}, limit: {low, high, restricted},
+#   starting-stock, restock-amount
+#
+# Rule of thumb for flavor:
+#   - A port that PRODUCES a good: low initial-price, high starting-stock, high restock-amount.
+#   - A port that DEMANDS a good: high initial-price, low starting-stock, low restock-amount.
+
+defaults:
+  radius: 40
+  restock:
+    min-minutes: 45
+    max-minutes: 90
+    amount: 64
+
+ports:
+
+  # Example fishing/farming harbor: cheap food & leather, hungry for metals.
+  saltmere:
+    display-name: '<gradient:#4fc3f7:#81d4fa>Saltmere Harbor</gradient>'
+    location:
+      world: 'world'
+      x: 0
+      z: 0
+      radius: 50
+    restock:
+      min-minutes: 40
+      max-minutes: 80
+    goods:
+      cod:
+        initial-price: 3
+        starting-stock: 800
+        restock-amount: 256
+      salmon:
+        initial-price: 4
+        starting-stock: 500
+        restock-amount: 160
+      wheat:
+        initial-price: 2
+        starting-stock: 600
+        restock-amount: 192
+      bread:
+        initial-price: 6
+        starting-stock: 300
+        restock-amount: 96
+      leather:
+        initial-price: 18
+        starting-stock: 400
+        restock-amount: 128
+      feather:
+        initial-price: 3
+        starting-stock: 600
+        restock-amount: 192
+      iron_ingot:
+        initial-price: 16
+        starting-stock: 40
+        restock-amount: 12
+      gold_ingot:
+        initial-price: 70
+        starting-stock: 15
+        restock-amount: 6
+      coal:
+        initial-price: 6
+        starting-stock: 80
+        restock-amount: 24
+
+  # Example mining outpost: cheap metals, pays well for food & supplies.
+  emberfall:
+    display-name: '<gradient:#ff8a65:#ffb74d>Emberfall Docks</gradient>'
+    location:
+      world: 'world'
+      x: 1000
+      z: 1000
+      radius: 50
+    goods:
+      iron_ingot:
+        initial-price: 7
+        starting-stock: 500
+        restock-amount: 160
+      gold_ingot:
+        initial-price: 38
+        starting-stock: 200
+        restock-amount: 64
+      gunpowder:
+        initial-price: 40
+        starting-stock: 80
+        restock-amount: 24
+      coal:
+        initial-price: 2
+        starting-stock: 900
+        restock-amount: 288
+      copper_ingot:
+        initial-price: 2
+        starting-stock: 700
+        restock-amount: 224
+      leather:
+        initial-price: 45
+        starting-stock: 30
+        restock-amount: 10
+      bread:
+        initial-price: 14
+        starting-stock: 50
+        restock-amount: 16
+      cod:
+        initial-price: 9
+        starting-stock: 60
+        restock-amount: 20
+
+  # Example timber & wool town: cheap wood/wool, pays for metal and luxuries.
+  thornwick:
+    display-name: '<gradient:#a5d6a7:#66bb6a>Thornwick Landing</gradient>'
+    location:
+      world: 'world'
+      x: -1000
+      z: 500
+      radius: 45
+    goods:
+      oak_log:
+        initial-price: 1
+        starting-stock: 1200
+        restock-amount: 384
+      spruce_log:
+        initial-price: 1
+        starting-stock: 1200
+        restock-amount: 384
+      white_wool:
+        initial-price: 3
+        starting-stock: 500
+        restock-amount: 160
+      wheat:
+        initial-price: 4
+        starting-stock: 150
+        restock-amount: 48
+      iron_ingot:
+        initial-price: 14
+        starting-stock: 60
+        restock-amount: 18
+      emerald:
+        initial-price: 150
+        starting-stock: 10
+        restock-amount: 3

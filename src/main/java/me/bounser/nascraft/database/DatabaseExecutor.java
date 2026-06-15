@@ -95,11 +95,28 @@ public class DatabaseExecutor {
         });
     }
 
+    /**
+     * Submits an empty task and waits for it: since the executor is a
+     * single FIFO thread, returning means every previously queued write
+     * has completed. Used before reload re-reads item state.
+     */
+    public boolean flush(int timeoutSeconds) {
+        try {
+            executor.submit(() -> { }).get(timeoutSeconds, TimeUnit.SECONDS);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private void runWithRetry(Consumer<Connection> task) {
         int attempt = 0;
         while (attempt < MAX_RETRIES) {
             try (Connection conn = dataSource.getConnection()) {
                 task.accept(conn);
+                return;
+            } catch (RuntimeException e) {
+                Nascraft.getInstance().getLogger().severe("Unexpected error in DB task: " + e);
                 return;
             } catch (SQLException e) {
                 String msg = e.getMessage();
@@ -131,6 +148,7 @@ public class DatabaseExecutor {
         executor.shutdown();
         try {
             if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                Nascraft.getInstance().getLogger().severe("Database writes did not finish within 10s; pending writes were dropped.");
                 executor.shutdownNow();
             }
         } catch (InterruptedException e) {

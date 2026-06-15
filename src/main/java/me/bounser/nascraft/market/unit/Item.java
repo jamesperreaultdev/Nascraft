@@ -1,7 +1,6 @@
 package me.bounser.nascraft.market.unit;
 
 import me.bounser.nascraft.Nascraft;
-import me.bounser.nascraft.advancedgui.Images;
 import me.bounser.nascraft.api.events.Action;
 import me.bounser.nascraft.api.events.TransactionCompletedEvent;
 import me.bounser.nascraft.config.lang.Lang;
@@ -16,12 +15,12 @@ import me.bounser.nascraft.formatter.RoundUtils;
 import me.bounser.nascraft.managers.InventoryManager;
 import me.bounser.nascraft.managers.currencies.CurrenciesManager;
 import me.bounser.nascraft.managers.currencies.Currency;
+import me.bounser.nascraft.market.GoodSettings;
 import me.bounser.nascraft.market.MarketManager;
 import me.bounser.nascraft.managers.MoneyManager;
-import me.bounser.nascraft.market.resources.Category;
+import me.bounser.nascraft.market.Port;
 import me.bounser.nascraft.config.Config;
 import me.bounser.nascraft.formatter.Style;
-import me.bounser.nascraft.market.unit.stats.Instant;
 import me.bounser.nascraft.market.unit.stats.ItemStats;
 import net.kyori.adventure.platform.bukkit.BukkitComponentSerializer;
 import net.kyori.adventure.text.Component;
@@ -33,7 +32,6 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.awt.image.BufferedImage;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -44,11 +42,11 @@ public class Item {
     private String alias;
     private String taggedAlias;
     private String formattedAlias;
-    private final BufferedImage icon;
-    private Category category;
+
+    private final Port port;
 
     private final Price price;
-    private Currency currency;
+    private final Currency currency;
 
     private int operations;
 
@@ -57,7 +55,7 @@ public class Item {
     private float collectedTaxes;
 
     private int stock;
-    private int maxStock;
+    private final int restockAmount;
 
     private ItemStats itemStats;
 
@@ -65,62 +63,52 @@ public class Item {
 
     private final Item parent;
 
-    private List<Item> childs = new ArrayList<>();
+    private final List<Item> childs = new ArrayList<>();
 
-    boolean restricted;
+    private final boolean restricted;
 
-    public Item (ItemStack itemStack, String identifier, String alias, Category category, BufferedImage image) {
+    public Item(ItemStack itemStack, String identifier, String alias, Port port, GoodSettings settings) {
 
         itemStack.setAmount(1);
 
         this.itemStack = itemStack;
         this.identifier = identifier;
+        this.port = port;
 
         setupAlias(alias);
 
-        this.currency = CurrenciesManager.getInstance().getCurrency(
-                Config.getInstance().getCurrency(identifier)
-        );
+        this.currency = CurrenciesManager.getInstance().getDefaultCurrency();
 
-        if (currency == null)
-            Nascraft.getInstance().getLogger().severe("Item: " + identifier + " doesn't have a valid currency.");
+        this.price = new Price(this, settings);
 
-        this.price = new Price(
-                this,
-                Config.getInstance().getInitialPrice(identifier),
-                Config.getInstance().getElasticity(identifier),
-                Config.getInstance().getSupport(identifier),
-                Config.getInstance().getResistance(identifier),
-                Config.getInstance().getNoiseIntensity(identifier));
-
-        this.icon = image;
-        this.restricted = Config.getInstance().getRestricted(identifier);
+        this.restricted = settings.isRestricted();
 
         price.initializeHourValues(DatabaseManager.get().getDatabase().retrieveLastPrice(this));
 
-        this.category = category;
         operations = 0;
         multiplier = 1;
         parent = null;
 
-        this.maxStock = 0; // No max stock limit
-        this.stock = Config.getInstance().getItemStartingStock(identifier);
+        this.stock = settings.getStartingStock();
+        this.restockAmount = settings.getRestockAmount();
 
         itemStats = new ItemStats(this);
     }
 
-    public Item(Item parent, float multiplier, ItemStack itemStack, String identifier, String alias, Currency currency){
+    public Item(Item parent, float multiplier, ItemStack itemStack, String identifier, String alias) {
 
         this.currency = parent.getCurrency();
 
         itemStack.setAmount(1);
 
         this.parent = parent;
+        this.port = parent.getPort();
         this.itemStack = itemStack;
         this.multiplier = multiplier;
         this.identifier = identifier;
         this.price = parent.getPrice();
-        this.icon = Images.getInstance().getImage(itemStack.getType());
+        this.restricted = parent.isPriceRestricted();
+        this.restockAmount = 0;
 
         setupAlias(alias);
     }
@@ -160,13 +148,11 @@ public class Item {
         childs.add(item);
     }
 
-    public void removeChildItem(Item item) {
-        childs.remove(item);
-    }
-
     public List<Item> getChilds() {
         return childs;
     }
+
+    public Port getPort() { return port; }
 
     public String getName() { return alias; }
 
@@ -194,9 +180,10 @@ public class Item {
             return 0;
         }
 
-        // Check stock limit (market can only sell if it has stock)
+        // The port can only sell what it has in stock.
         Item stockItem = parent != null ? parent : this;
-        if (Config.getInstance().getStockRestockEnabled() && stockItem.stock < amount) {
+        int stockNeeded = (int) Math.ceil(amount * multiplier);
+        if (stockItem.stock < stockNeeded) {
             if (player != null && feedback) Lang.get().message(player, Message.MARKET_STOCK_FULL, "[STOCK]", String.valueOf(stockItem.stock), "[NAME]", stockItem.taggedAlias);
             return 0;
         }
@@ -206,96 +193,36 @@ public class Item {
 
         if (event.isCancelled()) return 0;
 
-        if(!MarketManager.getInstance().getActive()) { Lang.get().message(player, Message.SHOP_CLOSED); return 0; }
+        if (!MarketManager.getInstance().getActive()) {
+            if (player != null && feedback) Lang.get().message(player, Message.SHOP_CLOSED);
+            return 0;
+        }
 
         double worth = price.getProjectedCost(-amount*multiplier, price.getBuyTaxMultiplier());
 
         if (!checkBalance(offlinePlayer, player, feedback, worth)) return 0;
         if (!InventoryManager.checkInventory(player, feedback, itemStack, amount)) return 0;
 
+        // Charge first; only hand the items over once the money is confirmed taken.
+        if (!MoneyManager.getInstance().withdraw(offlinePlayer, currency, worth)) {
+            if (player != null && feedback) Lang.get().message(player, currency.getNotEnoughMessage());
+            return 0;
+        }
+
         if (player != null && feedback) {
             InventoryManager.addItemsToInventory(player, itemStack, amount);
         }
 
-        MoneyManager.getInstance().withdraw(offlinePlayer, currency, worth, (1-price.getBuyTaxMultiplier()));
-
         if (player != null && feedback) Lang.get().message(player, Message.BUY_MESSAGE, Formatter.format(currency, worth, Style.ROUND_BASIC), String.valueOf(amount), taggedAlias);
 
         if (!limitReached) {
-            if (parent != null)
-                parent.updateInternalValues(amount,
-                        amount*price.getValue(),
-                        -amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-            else
-                updateInternalValues(amount,
-                        amount*price.getValue(),
-                        -amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
+            stockItem.updateInternalValues(amount,
+                    amount*price.getValue(),
+                    -amount*multiplier,
+                    price.getValue()*(price.getBuyTaxMultiplier()-1)*amount*multiplier);
         }
 
-        // Decrease stock when player buys from market
-        if (Config.getInstance().getStockRestockEnabled()) {
-            stockItem.addStock((int) (-amount * multiplier));
-        }
-
-        Trade trade = new Trade(this, LocalDateTime.now(), worth, amount, true, false, uuid);
-
-        DatabaseManager.get().getDatabase().saveTrade(trade);
-
-        if (Config.getInstance().getDiscordEnabled() && Config.getInstance().getLogChannelEnabled())
-            DiscordLog.getInstance().sendTradeLog(trade);
-
-        MarketManager.getInstance().addOperation();
-
-        TransactionCompletedEvent transactionEvent = new TransactionCompletedEvent(player, this, amount, Action.BUY, worth);
-        Bukkit.getPluginManager().callEvent(transactionEvent);
-
-        return worth;
-    }
-
-    public double buyWithoutCost(int amount, UUID uuid) {
-
-        Player player = Bukkit.getPlayer(uuid);
-
-        boolean limitReached = !price.canStockChange(amount, true);
-
-        if (limitReached && restricted) {
-            return 0;
-        }
-
-        // Check stock limit (market can only sell if it has stock)
-        Item stockItem = parent != null ? parent : this;
-        if (Config.getInstance().getStockRestockEnabled() && stockItem.stock < amount) {
-            return 0;
-        }
-
-        BuyItemEvent event = new BuyItemEvent(player, this, amount);
-        Bukkit.getPluginManager().callEvent(event);
-
-        if (event.isCancelled()) return 0;
-
-        if(!MarketManager.getInstance().getActive()) { Lang.get().message(player, Message.SHOP_CLOSED); return 0; }
-
-        double worth = price.getProjectedCost(-amount*multiplier, price.getBuyTaxMultiplier());
-
-        if (!limitReached) {
-            if (parent != null)
-                parent.updateInternalValues(amount,
-                        amount*price.getValue(),
-                        -amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-            else
-                updateInternalValues(amount,
-                        amount*price.getValue(),
-                        -amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-        }
-
-        // Decrease stock when player buys from market
-        if (Config.getInstance().getStockRestockEnabled()) {
-            stockItem.addStock((int) (-amount * multiplier));
-        }
+        stockItem.addStock(-stockNeeded);
 
         Trade trade = new Trade(this, LocalDateTime.now(), worth, amount, true, false, uuid);
 
@@ -313,7 +240,7 @@ public class Item {
     }
 
     public boolean checkBalance(OfflinePlayer offlinePlayer, Player player, boolean feedback, double money) {
-        if (!MoneyManager.getInstance().hasEnoughMoney(offlinePlayer, currency, money)) {
+        if (!MoneyManager.getInstance().hasEnoughMoney(offlinePlayer, money)) {
             if (player != null && feedback) Lang.get().message(player, currency.getNotEnoughMessage());
             return false;
         }
@@ -358,26 +285,18 @@ public class Item {
             player.getInventory().removeItem(operationItemStack);
         }
 
-        if (!limitReached) {
-            if (parent != null)
-                parent.updateInternalValues(amount,
-                        amount*price.getValue(),
-                        amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-            else
-                updateInternalValues(amount,
-                        amount*price.getValue(),
-                        amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-        }
-
-        // Increase stock when player sells to market
         Item stockItem = parent != null ? parent : this;
-        if (Config.getInstance().getStockRestockEnabled()) {
-            stockItem.addStock((int) (amount * multiplier));
+
+        if (!limitReached) {
+            stockItem.updateInternalValues(amount,
+                    amount*price.getValue(),
+                    amount*multiplier,
+                    price.getValue()*(1-price.getSellTaxMultiplier())*amount*multiplier);
         }
 
-        MoneyManager.getInstance().deposit(offlinePlayer, currency, worth, price.getSellTaxMultiplier());
+        stockItem.addStock((int) (amount * multiplier));
+
+        MoneyManager.getInstance().deposit(offlinePlayer, currency, worth);
 
         worth = RoundUtils.round(worth);
 
@@ -396,77 +315,8 @@ public class Item {
         return worth;
     }
 
-    public double sellWithoutPayment(int amount, UUID uuid) {
-
-        Player player = Bukkit.getPlayer(uuid);
-
-        boolean limitReached = !price.canStockChange(amount, false);
-
-        if (limitReached && restricted) {
-            return -1;
-        }
-
-        SellItemEvent event = new SellItemEvent(player, this, amount);
-        Bukkit.getPluginManager().callEvent(event);
-
-        if (event.isCancelled()) return -1;
-
-        if (!MarketManager.getInstance().getActive()) {
-            return -1;
-        }
-
-        ItemStack operationItemStack = itemStack.clone();
-
-        operationItemStack.setAmount(1);
-
-        double worth = price.getProjectedCost(amount*multiplier, price.getSellTaxMultiplier());
-
-        if (!limitReached) {
-            if (parent != null)
-                parent.updateInternalValues(amount,
-                        amount*price.getValue(),
-                        amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-            else
-                updateInternalValues(amount,
-                        amount*price.getValue(),
-                        amount*multiplier,
-                        price.getValue()*(1-price.getBuyTaxMultiplier())*amount*multiplier);
-        }
-
-        // Increase stock when player sells to market
-        Item stockItem = parent != null ? parent : this;
-        if (Config.getInstance().getStockRestockEnabled()) {
-            stockItem.addStock((int) (amount * multiplier));
-        }
-
-        worth = RoundUtils.round(worth);
-
-        Trade trade = new Trade(this, LocalDateTime.now(), worth, amount, false, false, uuid);
-
-        DatabaseManager.get().getDatabase().saveTrade(trade);
-        if (Config.getInstance().getDiscordEnabled() && Config.getInstance().getLogChannelEnabled())
-            DiscordLog.getInstance().sendTradeLog(trade);
-        MarketManager.getInstance().addOperation();
-
-        TransactionCompletedEvent transactionEvent = new TransactionCompletedEvent(player, this, amount, Action.SELL, worth);
-        Bukkit.getPluginManager().callEvent(transactionEvent);
-
-        return worth;
-    }
-
     public List<Double> getValuesPastHour() {
         return price.getValuesPastHour();
-    }
-
-    public void ghostBuyItem(int amount) {
-        updateInternalValues(-amount, amount, -amount,price.getValue()*price.getBuyTaxMultiplier());
-        MarketManager.getInstance().addOperation();
-    }
-
-    public void ghostSellItem(int amount) {
-        updateInternalValues(amount, amount, amount, price.getValue()*price.getSellTaxMultiplier());
-        MarketManager.getInstance().addOperation();
     }
 
     private void updateInternalValues(int operations, double volume, float stockChange, double taxes) {
@@ -499,8 +349,6 @@ public class Item {
 
     public Currency getCurrency() { return currency; }
 
-    public void setCurrency(Currency currency) { this.currency = currency; }
-
     public int getOperations() { return operations; }
 
     public void lowerOperations() {
@@ -524,21 +372,6 @@ public class Item {
 
     public ItemStats getItemStats() { return itemStats; }
 
-    public Category getCategory() { return category; }
-
-    public void setCategory(Category category) { this.category = category; }
-
-    public void changeProperties(double initialPrice, String alias, float elasticity, float noiseSensibility, double support, double resistance) {
-
-        price.setInitialValue(initialPrice)
-                .setElasticity(elasticity)
-                .setNoiseIntensity(noiseSensibility)
-                .setSupport(support)
-                .setResistance(resistance);
-
-        this.alias = alias;
-    }
-
     public ItemStack getItemStack() { return itemStack.clone(); }
 
     public ItemStack getItemStack(int quantity) {
@@ -547,32 +380,34 @@ public class Item {
         return clonedItemStack;
     }
 
-    public void setItemStack(ItemStack itemStack) { this.itemStack = itemStack; }
-
-    public BufferedImage getIcon() { return icon; }
-
     public boolean isPriceRestricted() { return restricted; }
 
-    public int getStock() { return stock; }
+    public int getStock() { return parent != null ? parent.getStock() : stock; }
 
-    public int getMaxStock() { return maxStock; }
+    public int getRestockAmount() { return restockAmount; }
 
-    public void setStock(int stock) { this.stock = Math.max(0, stock); }
+    public void setStock(int stock) {
+        if (parent != null) { parent.setStock(stock); return; }
+        this.stock = Math.max(0, stock);
+    }
 
-    public void addStock(int amount) { this.stock = Math.max(0, stock + amount); }
+    public void addStock(int amount) {
+        if (parent != null) { parent.addStock(amount); return; }
+        this.stock = Math.max(0, stock + amount);
+    }
 
-    public boolean hasStock() { return stock > 0; }
-
-    public boolean canBuyAmount(int amount) { return stock >= amount; }
+    public boolean hasStock() { return getStock() > 0; }
 
     public double getChangeLastDay() {
-        Instant firstInstant = DatabaseManager.get().getDatabase().getDayPrices(this).get(0);
 
-        double firstValue = firstInstant.getPrice();
+        List<me.bounser.nascraft.market.unit.stats.Instant> dayPrices = DatabaseManager.get().getDatabase().getDayPrices(this);
+
+        if (dayPrices == null || dayPrices.isEmpty()) return 0;
+
+        double firstValue = dayPrices.get(0).getPrice();
 
         if (firstValue == 0) return 0;
 
-        return ((price.getValue() - firstInstant.getPrice()) / firstInstant.getPrice());
+        return ((price.getValue() - firstValue) / firstValue);
     }
-
 }

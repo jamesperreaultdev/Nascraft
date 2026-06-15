@@ -1,7 +1,5 @@
 package me.bounser.nascraft.database.commands;
 
-import me.bounser.nascraft.config.Config;
-import me.bounser.nascraft.market.MarketManager;
 import me.bounser.nascraft.market.unit.Item;
 
 import java.sql.Connection;
@@ -9,133 +7,73 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+/**
+ * Per-port item state. Rows are keyed by (port_id, identifier): the same
+ * good has independent price/stock state on every port. Child items share
+ * state with their parent, so only parent rows are ever persisted.
+ */
 public class ItemProperties {
 
-    public static void saveItem(Connection connection, Item item) {
+    private static Item resolveParent(Item item) {
+        return item.getParent() != null ? item.getParent() : item;
+    }
 
-        try {
-            String sql = "SELECT stock FROM items WHERE identifier=?;";
+    public static void saveItem(Connection connection, Item item) throws SQLException {
 
-            PreparedStatement prep = connection.prepareStatement(sql);
-            prep.setString(1, item.getIdentifier());
-            ResultSet rs = prep.executeQuery();
+        item = resolveParent(item);
 
-            if (rs.next()) {
-                String sqlReplace = "REPLACE INTO items (lastprice, lowest, highest, stock, taxes, identifier) VALUES (?, ?, ?, ?, ?, ?);";
-                PreparedStatement prepReplace = connection.prepareStatement(sqlReplace);
+        String sql = "INSERT OR REPLACE INTO port_items (port_id, identifier, lastprice, lowest, highest, price_stock, stock, taxes) VALUES (?,?,?,?,?,?,?,?);";
 
-                prepReplace.setDouble(1, item.getPrice().getValue());
-                prepReplace.setDouble(2, item.getPrice().getHistoricalLow());
-                prepReplace.setDouble(3, item.getPrice().getHistoricalHigh());
-                prepReplace.setDouble(4, item.getPrice().getStock());
-                prepReplace.setDouble(5, item.getCollectedTaxes());
-
-                prepReplace.setString(6, item.getIdentifier());
-
-                prepReplace.executeUpdate();
-            } else {
-                String sqlInsert = "INSERT INTO items (lastprice, lowest, highest, stock, taxes, identifier) VALUES (?, ?, ?, ?, ?, ?);";
-                PreparedStatement prepInsert = connection.prepareStatement(sqlInsert);
-
-                prepInsert.setDouble(1, item.getPrice().getValue());
-                prepInsert.setDouble(2, item.getPrice().getHistoricalLow());
-                prepInsert.setDouble(3, item.getPrice().getHistoricalHigh());
-                prepInsert.setDouble(4, item.getPrice().getStock());
-                prepInsert.setDouble(5, item.getCollectedTaxes());
-
-                prepInsert.setString(6, item.getIdentifier());
-
-                prepInsert.executeUpdate();
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        try (PreparedStatement prep = connection.prepareStatement(sql)) {
+            prep.setString(1, item.getPort().getId());
+            prep.setString(2, item.getIdentifier());
+            prep.setDouble(3, item.getPrice().getValue());
+            prep.setDouble(4, item.getPrice().getHistoricalLow());
+            prep.setDouble(5, item.getPrice().getHistoricalHigh());
+            prep.setDouble(6, item.getPrice().getStock());
+            prep.setInt(7, item.getStock());
+            prep.setDouble(8, item.getCollectedTaxes());
+            prep.executeUpdate();
         }
     }
 
-    public static void retrieveItem(Connection connection, Item item) {
+    public static void retrieveItem(Connection connection, Item item) throws SQLException {
 
-        try {
-            String sql = "SELECT lowest, highest, stock, taxes FROM items WHERE identifier=?;";
+        item = resolveParent(item);
 
-            PreparedStatement prep = connection.prepareStatement(sql);
-            prep.setString(1, item.getIdentifier());
+        String sql = "SELECT lowest, highest, price_stock, stock, taxes FROM port_items WHERE port_id=? AND identifier=?;";
+
+        try (PreparedStatement prep = connection.prepareStatement(sql)) {
+            prep.setString(1, item.getPort().getId());
+            prep.setString(2, item.getIdentifier());
             ResultSet rs = prep.executeQuery();
 
             if (rs.next()) {
-                item.getPrice().setStock(rs.getInt("stock"));
+                // setStock recomputes the price from the stored stock level.
+                item.getPrice().setStock((float) rs.getDouble("price_stock"));
                 item.getPrice().setHistoricalHigh(rs.getFloat("highest"));
                 item.getPrice().setHistoricalLow(rs.getFloat("lowest"));
+                item.setStock(rs.getInt("stock"));
                 item.setCollectedTaxes(rs.getFloat("taxes"));
-            } else {
-                String sqlinsert = "INSERT INTO items (identifier, lastprice, lowest, highest, stock, taxes) VALUES (?,?,?,?,?,?);";
-
-                PreparedStatement insertPrep = connection.prepareStatement(sqlinsert);
-                insertPrep.setString(1, item.getIdentifier());
-                insertPrep.setFloat(2, Config.getInstance().getInitialPrice(item.getIdentifier()));
-                insertPrep.setFloat(3, Config.getInstance().getInitialPrice(item.getIdentifier()));
-                insertPrep.setFloat(4, Config.getInstance().getInitialPrice(item.getIdentifier()));
-                insertPrep.setFloat(5, 0);
-                insertPrep.setFloat(6, 0);
-
-                item.getPrice().setStock(0);
-                item.getPrice().setHistoricalHigh(Config.getInstance().getInitialPrice(item.getIdentifier()));
-                item.getPrice().setHistoricalLow(Config.getInstance().getInitialPrice(item.getIdentifier()));
-                item.setCollectedTaxes(0);
-
-                insertPrep.executeUpdate();
             }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            // No row: keep the defaults coming from config.
         }
     }
 
-    public static float retrieveLastPrice(Connection connection, Item item) {
+    public static float retrieveLastPrice(Connection connection, Item item) throws SQLException {
 
-        try {
-            String selectSQL = "SELECT lastprice FROM items WHERE identifier = ?;";
-            PreparedStatement preparedStatement = connection.prepareStatement(selectSQL);
+        item = resolveParent(item);
 
-            preparedStatement.setString(1, item.getIdentifier());
+        String sql = "SELECT lastprice FROM port_items WHERE port_id=? AND identifier=?;";
 
-            ResultSet resultSet = preparedStatement.executeQuery();
+        try (PreparedStatement prep = connection.prepareStatement(sql)) {
+            prep.setString(1, item.getPort().getId());
+            prep.setString(2, item.getIdentifier());
+            ResultSet rs = prep.executeQuery();
 
-            if (resultSet.next()) {
-                return resultSet.getFloat("lastprice");
-            } else {
-                return Config.getInstance().getInitialPrice(item.getIdentifier());
-            }
+            if (rs.next()) return rs.getFloat("lastprice");
 
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static void retrieveItems(Connection connection) {
-
-        try {
-            String selectSQL = "SELECT stock, identifier FROM items;";
-
-            PreparedStatement preparedStatement = connection.prepareStatement(selectSQL);
-
-            ResultSet resultSet = preparedStatement.executeQuery();
-
-            while (resultSet.next()) {
-
-                String identifier = resultSet.getString("identifier");
-
-                Item item = MarketManager.getInstance().getItem(identifier);
-
-                if (item == null) continue;
-
-                if (item.isParent()) {
-                    item.getPrice().setStock(resultSet.getFloat("stock"));
-                }
-
-            }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+            return (float) item.getPrice().getValue();
         }
     }
 

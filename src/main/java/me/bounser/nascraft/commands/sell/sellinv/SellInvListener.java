@@ -1,354 +1,455 @@
 package me.bounser.nascraft.commands.sell.sellinv;
 
 import me.bounser.nascraft.Nascraft;
+import me.bounser.nascraft.config.Config;
 import me.bounser.nascraft.config.lang.Lang;
 import me.bounser.nascraft.config.lang.Message;
 import me.bounser.nascraft.formatter.Formatter;
+import me.bounser.nascraft.formatter.Style;
 import me.bounser.nascraft.managers.InventoryManager;
 import me.bounser.nascraft.managers.currencies.CurrenciesManager;
-import me.bounser.nascraft.managers.currencies.Currency;
 import me.bounser.nascraft.market.MarketManager;
-import me.bounser.nascraft.formatter.Style;
+import me.bounser.nascraft.market.Port;
 import me.bounser.nascraft.market.unit.Item;
 import net.kyori.adventure.platform.bukkit.BukkitComponentSerializer;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import org.bukkit.Material;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.metadata.MetadataValue;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
-
+/**
+ * Deposit GUI bound to a port (the port id travels in the "NascraftSell"
+ * metadata). Players move items they want to sell into the GUI, can take
+ * them back, and sell everything at once at the port's prices.
+ *
+ * Dupe-safety:
+ * - Deposited ORIGINAL stacks are tracked per player keyed by the GUI slot
+ *   they are displayed in. Withdrawals remove by slot index: an item is only
+ *   handed back if Map#remove actually returned it.
+ * - On close/sell the tracked map entry is removed from the registry FIRST,
+ *   then the items are handed back/sold (reentrancy-safe).
+ * - Every click while the GUI is open is cancelled unconditionally, and
+ *   drags are cancelled too.
+ */
 public class SellInvListener implements Listener {
 
-    private final HashMap<Player, List<ItemStack>> playerItems = new HashMap<>();
+    private static SellInvListener instance;
+
+    /** Original deposited stacks per player, keyed by the GUI slot displaying them. */
+    private final Map<UUID, Map<Integer, ItemStack>> deposits = new HashMap<>();
+
+    public SellInvListener() { instance = this; }
+
+    public static SellInvListener getInstanceIfPresent() { return instance; }
 
     @EventHandler
-    public void onClickInventory(InventoryClickEvent event) {
+    public void onClick(InventoryClickEvent event) {
+
+        if (!(event.getWhoClicked() instanceof Player)) return;
 
         Player player = (Player) event.getWhoClicked();
 
-        if (!player.hasMetadata("NascraftSell")) return;
+        String portId = getBoundPortId(player);
+
+        if (portId == null) return;
 
         event.setCancelled(true);
 
-        if (event.getClickedInventory() != null && event.getClickedInventory().getType().equals(InventoryType.PLAYER)) {
+        Port port = MarketManager.getInstance().getPort(portId);
 
-            if (!MarketManager.getInstance().getActive()) {
-                Lang.get().message(player, Message.SHOP_CLOSED);
-                return;
+        if (port == null) {
+            // Port disappeared (reload). Closing returns the deposits via onClose.
+            scheduleClose(player);
+            return;
+        }
+
+        Inventory top = event.getView().getTopInventory();
+
+        int rawSlot = event.getRawSlot();
+
+        if (rawSlot < 0) return;
+
+        if (rawSlot >= top.getSize()) {
+            handleDeposit(player, port, event, top);
+            return;
+        }
+
+        Config config = Config.getInstance();
+
+        if (config.getCloseButtonEnabled() && rawSlot == config.getCloseButtonSlot()) {
+            scheduleClose(player);
+            return;
+        }
+
+        if (rawSlot == config.getSellButtonSlot()) {
+            handleSell(player, port, top);
+            return;
+        }
+
+        handleWithdraw(player, port, rawSlot, top);
+    }
+
+    private void handleDeposit(Player player, Port port, InventoryClickEvent event, Inventory top) {
+
+        if (!MarketManager.getInstance().getActive()) {
+            Lang.get().message(player, Message.SHOP_CLOSED);
+            return;
+        }
+
+        ItemStack clicked = event.getCurrentItem();
+
+        if (clicked == null || clicked.getType().isAir()) return;
+
+        Item item = port.getItem(clicked);
+
+        if (item == null) {
+            Lang.get().message(player, Message.SELL_ITEM_NOT_ALLOWED);
+            return;
+        }
+
+        Map<Integer, ItemStack> playerDeposits = deposits.computeIfAbsent(player.getUniqueId(), key -> new HashMap<>());
+
+        Inventory clickedInventory = event.getClickedInventory();
+
+        if (clickedInventory == null) return;
+
+        if (event.isShiftClick()) {
+
+            boolean full = false;
+
+            for (int i = 0; i < clickedInventory.getSize(); i++) {
+
+                ItemStack stack = clickedInventory.getItem(i);
+
+                if (stack == null || stack.getType().isAir() || !stack.isSimilar(clicked)) continue;
+
+                if (!canDeposit(player, port, playerDeposits, item, stack.getAmount())) return;
+
+                int slot = nextFreeContentSlot(playerDeposits, top.getSize());
+
+                if (slot == -1) { full = true; break; }
+
+                playerDeposits.put(slot, stack.clone());
+                clickedInventory.setItem(i, null);
+                top.setItem(slot, buildDisplayStack(stack));
             }
 
-            ItemStack itemClicked = event.getCurrentItem();
+            if (full) Lang.get().message(player, Message.SELL_FULL);
 
-            if (itemClicked == null) return;
+        } else {
 
-            if (playerItems.get(player) != null && playerItems.get(player).size() >= 27) {
+            if (!canDeposit(player, port, playerDeposits, item, clicked.getAmount())) return;
+
+            int slot = nextFreeContentSlot(playerDeposits, top.getSize());
+
+            if (slot == -1) {
                 Lang.get().message(player, Message.SELL_FULL);
                 return;
             }
 
-            Item item = MarketManager.getInstance().getItem(itemClicked);
+            playerDeposits.put(slot, clicked.clone());
+            clickedInventory.setItem(event.getSlot(), null);
+            top.setItem(slot, buildDisplayStack(clicked));
+        }
 
-            if (item != null) {
+        updateSellButton(top, port, player);
+    }
 
-                int totalChange = itemClicked.getAmount();
+    /** Refuses deposits that would push a restricted good past its price floor. */
+    private boolean canDeposit(Player player, Port port, Map<Integer, ItemStack> playerDeposits, Item item, int amount) {
 
-                ItemStack itemItemStack = item.getItemStack();
+        if (!item.isPriceRestricted()) return true;
 
-                if (playerItems.containsKey(player) && !playerItems.get(player).isEmpty())
-                    for (ItemStack itemStack : playerItems.get(player))
-                        if (MarketManager.getInstance().isSimilarEnough(itemItemStack, itemStack))
-                            totalChange += itemStack.getAmount();
+        int alreadyDeposited = 0;
 
+        for (ItemStack deposited : playerDeposits.values()) {
 
-                if (!item.getPrice().canStockChange(totalChange, false) && item.isPriceRestricted()) {
-                    Lang.get().message(player, Message.BOTTOM_LIMIT_REACHED);
-                    return;
-                }
+            if (deposited == null) continue;
 
-                List<ItemStack> items = playerItems.get(player);
+            Item depositedItem = port.getItem(deposited);
 
-                if (items == null) items = new ArrayList<>();
+            if (depositedItem != null && depositedItem.getIdentifier().equals(item.getIdentifier()))
+                alreadyDeposited += deposited.getAmount();
+        }
 
-                float totalAmount = itemClicked.getAmount();
+        if (!item.getPrice().canStockChange(alreadyDeposited + amount, false)) {
+            Lang.get().message(player, Message.BOTTOM_LIMIT_REACHED);
+            return false;
+        }
 
-                if (items.contains(item.getItemStack())) {
+        return true;
+    }
 
-                    for (ItemStack itemStack : items)
-                        if (itemStack.isSimilar(item.getItemStack()))
-                            totalAmount += itemStack.getAmount();
+    private void handleWithdraw(Player player, Port port, int slot, Inventory top) {
 
-                    if (!item.getPrice().canStockChange(totalAmount, false) && item.isPriceRestricted()) {
-                        Lang.get().message(player, Message.BOTTOM_LIMIT_REACHED);
-                        return;
-                    }
-                }
+        if (slot < firstContentSlot() || slot > lastContentSlot(top.getSize())) return;
 
-                if (event.isShiftClick()) {
+        Map<Integer, ItemStack> playerDeposits = deposits.get(player.getUniqueId());
 
-                    for (int i = 0; i < event.getClickedInventory().getSize(); i++) {
-                        ItemStack itemStack = event.getClickedInventory().getItem(i);
+        if (playerDeposits == null) return;
 
-                        if (itemStack != null && itemStack.isSimilar(itemClicked)) {
+        ItemStack original = playerDeposits.remove(slot);
 
-                            items.add(itemStack);
-                            event.getClickedInventory().setItem(i, new ItemStack(Material.AIR));
+        // Only hand an item back if it was actually removed from the tracked map.
+        if (original == null) return;
 
-                        }
-                        if (items.size() >= 27) break;
-                    }
+        top.setItem(slot, null);
 
-                    playerItems.put(player, items);
+        InventoryManager.addItemsToInventory(player, original, original.getAmount());
 
-                } else {
-                    items.add(event.getCurrentItem());
+        updateSellButton(top, port, player);
+    }
 
-                    playerItems.put(player, items);
-                    event.getClickedInventory().setItem(event.getSlot(), new ItemStack(Material.AIR));
-                }
+    private void handleSell(Player player, Port port, Inventory top) {
 
-                renderInv(event.getView().getTopInventory(), player);
-                return;
+        if (!MarketManager.getInstance().getActive()) {
+            Lang.get().message(player, Message.SHOP_CLOSED);
+            return;
+        }
+
+        Map<Integer, ItemStack> playerDeposits = deposits.get(player.getUniqueId());
+
+        if (playerDeposits == null || playerDeposits.isEmpty()) return;
+
+        if (!player.hasPermission("nascraft.ports.bypass") && !port.isInside(player.getLocation())) {
+            Lang.get().message(player, Message.NOT_IN_PORT);
+            // Closing returns the deposits via onClose.
+            scheduleClose(player);
+            return;
+        }
+
+        // Take ownership of the tracked items before doing anything with them.
+        deposits.remove(player.getUniqueId());
+
+        double total = 0;
+
+        for (ItemStack stack : playerDeposits.values()) {
+
+            if (stack == null) continue;
+
+            // Resolve fresh: if the port no longer trades it, give it back instead of selling.
+            Item item = port.getItem(stack);
+
+            if (item == null) {
+                InventoryManager.addItemsToInventory(player, stack, stack.getAmount());
+                continue;
             }
 
-            Lang.get().message(player, Message.SELL_ITEM_NOT_ALLOWED);
+            // feedback=false: the GUI holds the items, Item#sell must not touch the inventory.
+            double worth = item.sell(stack.getAmount(), player.getUniqueId(), false);
 
-        } else {
-
-            switch (event.getRawSlot()) {
-
-                case 8:
-
-                    event.getWhoClicked().closeInventory(); break;
-
-                case 40:
-
-                    if (!MarketManager.getInstance().getActive()) {
-                        Lang.get().message(player, Message.SHOP_CLOSED);
-                        return;
-                    }
-
-                    if (playerItems.isEmpty()) return;
-
-                    HashMap<Currency, Double> result = new HashMap<>();
-
-                    List<ItemStack> newPlayerItems = new ArrayList<>();
-
-                    for (ItemStack itemStack : playerItems.get(player)) {
-
-                        Item item = MarketManager.getInstance().getItem(itemStack);
-
-                        if (item.getPrice().canStockChange(itemStack.getAmount(), false) || !item.isPriceRestricted()) {
-                            double value = item.sell(itemStack.getAmount(), player.getUniqueId(), false);
-
-                            if (result.containsKey(item.getCurrency())) {
-                                double tempValue = result.get(item.getCurrency());
-                                tempValue += value;
-                                result.put(item.getCurrency(), tempValue);
-                            } else {
-                                result.put(item.getCurrency(), value);
-                            }
-
-                        } else {
-                            newPlayerItems.add(itemStack);
-                        }
-                    }
-
-                    if (newPlayerItems.isEmpty()) playerItems.remove(player);
-                    else playerItems.put(player, newPlayerItems);
-
-                    renderInv(event.getClickedInventory(), player);
-
-                    String report = "";
-
-                    int i = 0;
-
-                    for (Currency currency : CurrenciesManager.getInstance().getCurrencies()) {
-                        if (result.get(currency) == null) continue;
-                        i++;
-                        report += Formatter.format(currency, result.get(currency), Style.ROUND_BASIC) + (i == result.size() ? "" : ",");
-                    }
-
-                    Lang.get().message(player, Message.SELL_ACTION_MESSAGE, report, "", "");
-
-                    break;
-
-                default:
-
-                    if (8 >= event.getRawSlot() || 36 <= event.getRawSlot()) return;
-
-                    List<ItemStack> items = playerItems.get(player);
-
-                    ItemStack item = event.getCurrentItem();
-
-                    if (item == null) return;
-
-                    ItemMeta meta = item.getItemMeta();
-
-                    if (meta != null && meta.hasLore()) {
-                        if (meta.getLore().size() > 2) meta.setLore(meta.getLore().subList(0, meta.getLore().size()-2));
-                        else meta.setLore(null);
-                    }
-
-                    item.setItemMeta(meta);
-
-                    items.remove(item);
-                    playerItems.put(player, items);
-
-                    InventoryManager.addItemsToInventory(player, event.getCurrentItem(), event.getCurrentItem().getAmount());
-
-                    renderInv(event.getView().getTopInventory(), player);
-
-                    break;
+            if (worth < 0) {
+                InventoryManager.addItemsToInventory(player, stack, stack.getAmount());
+                continue;
             }
+
+            total += worth;
+        }
+
+        for (int slot = firstContentSlot(); slot <= lastContentSlot(top.getSize()); slot++)
+            top.setItem(slot, null);
+
+        updateSellButton(top, port, player);
+
+        if (total > 0) {
+            Lang.get().message(player, Message.SELL_ACTION_MESSAGE,
+                    Formatter.format(CurrenciesManager.getInstance().getDefaultCurrency(), total, Style.ROUND_BASIC), "", "");
         }
     }
 
     @EventHandler
-    public void onCloseInventory(InventoryCloseEvent event) {
+    public void onDrag(InventoryDragEvent event) {
+
+        if (!(event.getWhoClicked() instanceof Player)) return;
+
+        if (getBoundPortId((Player) event.getWhoClicked()) != null) event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onClose(InventoryCloseEvent event) {
+
+        if (!(event.getPlayer() instanceof Player)) return;
 
         Player player = (Player) event.getPlayer();
 
-        if (player.hasMetadata("NascraftSell")) {
-            player.removeMetadata("NascraftSell", Nascraft.getInstance());
+        if (!player.hasMetadata("NascraftSell")) return;
 
-            if (playerItems.containsKey(player)) {
-                for (ItemStack itemStack : playerItems.get(event.getPlayer()))
-                    InventoryManager.addItemsToInventory(player, itemStack, itemStack.getAmount());
+        player.removeMetadata("NascraftSell", Nascraft.getInstance());
 
-                playerItems.remove(event.getPlayer());
+        returnHeldItems(player);
+    }
+
+    /**
+     * Returns every tracked stack of the given player once. The map entry is
+     * removed before any item is handed back, so reentrant calls are no-ops.
+     */
+    public void returnHeldItems(Player player) {
+
+        Map<Integer, ItemStack> playerDeposits = deposits.remove(player.getUniqueId());
+
+        if (playerDeposits == null) return;
+
+        for (ItemStack stack : playerDeposits.values())
+            if (stack != null) InventoryManager.addItemsToInventory(player, stack, stack.getAmount());
+    }
+
+    /** Flushes the deposits of every player. Used by MarketMenuManager#closeAllMenus (reload/disable). */
+    public void returnAllHeldItems() {
+
+        for (UUID uuid : new ArrayList<>(deposits.keySet())) {
+
+            Map<Integer, ItemStack> playerDeposits = deposits.remove(uuid);
+
+            if (playerDeposits == null) continue;
+
+            Player player = Bukkit.getPlayer(uuid);
+
+            if (player == null) {
+                Nascraft.getInstance().getLogger().warning("Discarding " + playerDeposits.size() +
+                        " sell-menu stack(s) of offline player " + uuid + ".");
+                continue;
             }
+
+            for (ItemStack stack : playerDeposits.values())
+                if (stack != null) InventoryManager.addItemsToInventory(player, stack, stack.getAmount());
         }
     }
 
-    public void renderInv(Inventory inventory, Player player) {
+    public void updateSellButton(Inventory top, Port port, Player player) {
 
-        updateSellButton(inventory, player);
+        Config config = Config.getInstance();
 
-        if (playerItems.get(player) == null || playerItems.get(player).isEmpty()) {
-            for (int i = 9 ; i <= 35 ; i++) {
-                    inventory.setItem(i, new ItemStack(Material.AIR));
-            }
-            return;
-        }
+        int buttonSlot = config.getSellButtonSlot();
 
-        List<Material> materials = new ArrayList<>();
+        if (buttonSlot < 0 || buttonSlot >= top.getSize()) return;
 
-        for (ItemStack itemstack : playerItems.get(player)) { materials.add(itemstack.getType()); }
+        ItemStack button = top.getItem(buttonSlot);
 
-        Collections.sort(materials);
+        if (button == null) return;
 
-        List<ItemStack> items = new ArrayList<>(playerItems.get(player));
+        ItemMeta meta = button.getItemMeta();
 
-        for (int i = 9 ; i <= 35 ; i++) {
-            if (materials.size() != 0 && materials.get(0) != null) {
+        if (meta == null) return;
 
-                ItemStack item = null;
+        double total = getDepositsValue(port, player);
 
-                for (ItemStack itemStack : items) {
-                    if (itemStack != null && itemStack.getType().equals(materials.get(0))) {
-                        item = itemStack;
-                    }
-                }
-                items.remove(item);
+        String worth = total > 0 ?
+                Formatter.format(CurrenciesManager.getInstance().getDefaultCurrency(), total, Style.ROUND_BASIC) : "";
 
-                inventory.setItem(i, getDisplayClonedItem(item));
-                materials.remove(0);
-
-            } else {
-                inventory.setItem(i, new ItemStack(Material.AIR));
-            }
-        }
-    }
-
-    public ItemStack getDisplayClonedItem(ItemStack itemStack) {
-
-        ItemStack clonedItem = itemStack.clone();
-
-        ItemMeta meta = clonedItem.getItemMeta();
-
-        Component remove = MiniMessage.miniMessage().deserialize(Lang.get().message(Message.SELL_REMOVE_ITEM));
-        String removeLore = BukkitComponentSerializer.legacy().serialize(remove);
-
-        if (meta.hasLore()) {
-
-            List<String> lore = meta.getLore();
-
-            lore.add("");
-            lore.add(removeLore);
-
-            meta.setLore(lore);
-
-        } else {
-            meta.setLore(Arrays.asList("", removeLore));
-        }
-
-        clonedItem.setItemMeta(meta);
-
-        return clonedItem;
-    }
-
-    public void updateSellButton(Inventory inventory, Player player) {
-
-        ItemStack sellButton = inventory.getItem(40);
-
-        ItemMeta meta = sellButton.getItemMeta();
-
-        String result = "";
-
-        HashMap<Currency, Double> invResult = getSellInventoryValue(player);
-
-        for (Currency currency : invResult.keySet()) {
-            if (invResult.get(currency) > 0)
-                result += Formatter.format(currency, invResult.get(currency), Style.ROUND_BASIC) + "\n";
-        }
-
-        List<String> lore = new ArrayList<>();
-        for (String line : Lang.get().message(Message.SELL_BUTTON_LORE, "[WORTH-LIST]", result).split("\\n")) {
-            Component loreLine = MiniMessage.miniMessage().deserialize(line);
-            lore.add(BukkitComponentSerializer.legacy().serialize(loreLine));
-        }
+        List<String> lore = legacyLines(Lang.get().message(Message.SELL_BUTTON_LORE).replace("[WORTH-LIST]", worth));
 
         meta.setLore(lore);
+        button.setItemMeta(meta);
 
-        sellButton.setItemMeta(meta);
-
-        inventory.setItem(40, sellButton);
+        top.setItem(buttonSlot, button);
     }
 
-    public HashMap<Currency, Double> getSellInventoryValue(Player player) {
+    private double getDepositsValue(Port port, Player player) {
 
-        HashMap<Currency, Double> valuePerCurrency = new HashMap<>();
+        Map<Integer, ItemStack> playerDeposits = deposits.get(player.getUniqueId());
 
-        for (Currency currency : CurrenciesManager.getInstance().getCurrencies())
-            valuePerCurrency.put(currency, 0d);
+        if (playerDeposits == null || playerDeposits.isEmpty()) return 0;
 
-        if (playerItems.get(player) == null) return valuePerCurrency;
+        Map<String, Integer> amounts = new LinkedHashMap<>();
+        Map<String, Item> items = new LinkedHashMap<>();
 
-        HashMap<Item, Integer> content = new HashMap<>();
+        for (ItemStack stack : playerDeposits.values()) {
 
-        for (ItemStack itemStack : playerItems.get(player)) {
+            if (stack == null) continue;
 
-            Item item = MarketManager.getInstance().getItem(itemStack);
+            Item item = port.getItem(stack);
 
-            content.compute(item, (key, value) -> (value == null) ? itemStack.getAmount() : value + itemStack.getAmount());
+            if (item == null) continue;
+
+            amounts.merge(item.getIdentifier(), stack.getAmount(), Integer::sum);
+            items.put(item.getIdentifier(), item);
         }
 
-        for (Item item : content.keySet()) {
-            double internalValue = valuePerCurrency.get(item.getCurrency());
-            internalValue += item.sellPrice(content.get(item));
-            valuePerCurrency.put(item.getCurrency(), internalValue);
-        }
+        double total = 0;
 
-        return valuePerCurrency;
+        for (Map.Entry<String, Integer> entry : amounts.entrySet())
+            total += items.get(entry.getKey()).sellPrice(entry.getValue());
+
+        return total;
+    }
+
+    // Helpers:
+
+    private String getBoundPortId(Player player) {
+
+        if (!player.hasMetadata("NascraftSell")) return null;
+
+        List<MetadataValue> values = player.getMetadata("NascraftSell");
+
+        if (values.isEmpty()) return null;
+
+        return values.get(0).asString();
+    }
+
+    /** Content area: everything between the top and bottom border rows. */
+    private int firstContentSlot() { return 9; }
+
+    private int lastContentSlot(int size) { return size - 10; }
+
+    private int nextFreeContentSlot(Map<Integer, ItemStack> playerDeposits, int size) {
+
+        for (int slot = firstContentSlot(); slot <= lastContentSlot(size); slot++)
+            if (!playerDeposits.containsKey(slot)) return slot;
+
+        return -1;
+    }
+
+    private ItemStack buildDisplayStack(ItemStack original) {
+
+        ItemStack display = original.clone();
+
+        ItemMeta meta = display.getItemMeta();
+
+        if (meta == null) return display;
+
+        String removeLine = legacy(Lang.get().message(Message.SELL_REMOVE_ITEM));
+
+        List<String> lore = meta.hasLore() && meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+
+        lore.add("");
+        lore.add(removeLine);
+
+        meta.setLore(lore);
+        display.setItemMeta(meta);
+
+        return display;
+    }
+
+    private void scheduleClose(Player player) {
+        Bukkit.getScheduler().runTask(Nascraft.getInstance(), player::closeInventory);
+    }
+
+    private String legacy(String miniMessage) {
+        return BukkitComponentSerializer.legacy().serialize(MiniMessage.miniMessage().deserialize(miniMessage));
+    }
+
+    private List<String> legacyLines(String miniMessage) {
+
+        List<String> lines = new ArrayList<>();
+
+        for (String line : miniMessage.split("\\n"))
+            lines.add(legacy(line));
+
+        return lines;
     }
 }

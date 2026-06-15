@@ -15,31 +15,20 @@ public class InventoryManager {
 
         if (player == null) return true;
 
-        if (player.getInventory().firstEmpty() == -1) {
+        int maxStackSize = itemStack.getType().getMaxStackSize();
+        int space = 0;
 
-            int untilFull = 0;
-
-            for (ItemStack is : player.getInventory()) {
-                if(is != null && MarketManager.getInstance().isSimilarEnough(is, itemStack)) {
-                    untilFull += itemStack.getType().getMaxStackSize() - is.getAmount();
-                }
+        for (ItemStack content : player.getInventory().getStorageContents()) {
+            if (content == null || content.getType().equals(Material.AIR)) {
+                space += maxStackSize;
+            } else if (MarketManager.getInstance().isSimilarEnough(content, itemStack)) {
+                space += Math.max(0, maxStackSize - content.getAmount());
             }
+        }
 
-            if (untilFull < amount) {
-                if (feedback) Lang.get().message(player, Message.NOT_ENOUGH_SPACE);
-                return false;
-            }
-
-        } else {
-            int slotsUsed = 0;
-
-            for (ItemStack content : player.getInventory().getStorageContents())
-                if (content != null && !content.getType().equals(Material.AIR)) slotsUsed++;
-
-            if ((36 - slotsUsed) < (amount/itemStack.getType().getMaxStackSize())) {
-                if (feedback) Lang.get().message(player, Message.NOT_ENOUGH_SPACE);
-                return false;
-            }
+        if (space < amount) {
+            if (feedback) Lang.get().message(player, Message.NOT_ENOUGH_SPACE);
+            return false;
         }
 
         return true;

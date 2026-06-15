@@ -1,6 +1,14 @@
 # Nascraft items.yml - ${project.version}
+#
+# Global catalog of trade goods. Ports pick which of these they trade in
+# ports.yml, and can override any economic value per port.
+#
+# Per item (all optional except initial-price):
+#   initial-price, alias, elasticity, support, resistance, noise-intensity,
+#   tax: {buy, sell}, limit: {low, high, restricted},
+#   stock: {starting, restock-amount},
+#   child: {<id>: {multiplier, alias}}    (e.g. block forms of an ingot)
 
-# You can edit this file manually or using /nascraft editmarket
 items:
   iron_ingot:
     initial-price: 10
@@ -18,6 +26,22 @@ items:
         multiplier: 9
         alias: 'Gold Block'
 
+  copper_ingot:
+    initial-price: 4
+    alias: 'Copper Ingot'
+    child:
+      copper_block:
+        multiplier: 9
+        alias: 'Copper Block'
+
+  coal:
+    initial-price: 3
+    alias: 'Coal'
+    child:
+      coal_block:
+        multiplier: 9
+        alias: 'Coal Block'
+
   gunpowder:
     initial-price: 50
     alias: 'Gunpowder'
@@ -33,3 +57,35 @@ items:
   feather:
     initial-price: 5
     alias: 'Feather'
+
+  cod:
+    initial-price: 4
+    alias: 'Cod'
+
+  salmon:
+    initial-price: 6
+    alias: 'Salmon'
+
+  wheat:
+    initial-price: 3
+    alias: 'Wheat'
+
+  bread:
+    initial-price: 8
+    alias: 'Bread'
+
+  oak_log:
+    initial-price: 2
+    alias: 'Oak Log'
+
+  spruce_log:
+    initial-price: 2
+    alias: 'Spruce Log'
+
+  white_wool:
+    initial-price: 5
+    alias: 'Wool'
+
+  emerald:
+    initial-price: 120
+    alias: 'Emerald'
