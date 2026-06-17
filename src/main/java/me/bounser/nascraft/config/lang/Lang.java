@@ -67,8 +67,18 @@ public class Lang {
         if (!resourceFile.exists()) Nascraft.getInstance().saveResource(resourcePath, false);
     }
 
+    /** Null-safe lang lookup: missing keys warn and return empty instead of NPE-ing MiniMessage. */
+    private String raw(Message lang) {
+        String value = this.lang.getString(lang.name().toLowerCase());
+        if (value == null) {
+            Nascraft.getInstance().getLogger().warning("Lang section not found: " + lang.name().toLowerCase());
+            return "";
+        }
+        return value;
+    }
+
     public void message(Player player, Message lang) {
-        audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())));
+        audience.player(player).sendMessage(miniMessage.deserialize(raw(lang)));
     }
 
     public void message(Player player, String msg) {
@@ -80,13 +90,13 @@ public class Lang {
             Nascraft.getInstance().getLogger().warning("Lang section not found: " + lang.name().toLowerCase());
             return "Lang section not found: " + lang.name().toLowerCase();
         }
-        return this.lang.getString(lang.name().toLowerCase()).replace("&", "§"); }
+        return raw(lang).replace("&", "§"); }
 
     public void message(Player player, Message lang, String worth, String amount, String name) {
         if (!this.lang.contains(lang.name().toLowerCase())) {
             Nascraft.getInstance().getLogger().warning("Lang section not found: " + lang.name().toLowerCase());
         }
-        audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())
+        audience.player(player).sendMessage(miniMessage.deserialize(raw(lang)
                 .replace("[WORTH]", worth)
                 .replace("[AMOUNT]", amount)
                 .replace("[NAME]", name)));
@@ -94,27 +104,27 @@ public class Lang {
 
     public void message(Player player, Message lang, String placeholder, String replacement) {
 
-        audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())
+        audience.player(player).sendMessage(miniMessage.deserialize(raw(lang)
                 .replace(placeholder, replacement)));
     }
 
     public void message(Player player, Message lang, String placeholder1, String replacement1, String placeholder2, String replacement2) {
 
-        audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())
+        audience.player(player).sendMessage(miniMessage.deserialize(raw(lang)
                 .replace(placeholder1, replacement1)
                 .replace(placeholder2, replacement2)));
     }
 
     public void message(Player player, Message lang, String placeholder1, String replacement1, String placeholder2, String replacement2, String placeholder3, String replacement3) {
 
-        audience.player(player).sendMessage(miniMessage.deserialize(this.lang.getString(lang.name().toLowerCase())
+        audience.player(player).sendMessage(miniMessage.deserialize(raw(lang)
                 .replace(placeholder1, replacement1)
                 .replace(placeholder2, replacement2)
                 .replace(placeholder3, replacement3)));
     }
 
     public String message(Message lang, String worth, String amount, String name) {
-        return this.lang.getString(lang.name().toLowerCase())
+        return raw(lang)
                 .replace("&", "§")
                 .replace("[WORTH]", worth)
                 .replace("[AMOUNT]", amount)
@@ -122,13 +132,13 @@ public class Lang {
     }
 
     public String message(Message lang, String placeholder, String replacement) {
-        return this.lang.getString(lang.name().toLowerCase())
+        return raw(lang)
                 .replace("&", "§")
                 .replace(placeholder, replacement);
     }
 
     public String message(Message lang, String placeholder1, String replacement1, String placeholder2, String replacement2, String placeholder3, String replacement3) {
-        return this.lang.getString(lang.name().toLowerCase())
+        return raw(lang)
                 .replace("&", "§")
                 .replace(placeholder1, replacement1)
                 .replace(placeholder2, replacement2)
