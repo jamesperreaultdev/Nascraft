@@ -351,16 +351,21 @@ public class Config {
             itemStack = items.getSerializable("items." + identifier + ".item-stack", ItemStack.class);
 
         if (itemStack == null) {
-            Material material = Material.getMaterial(identifier.replaceAll("\\d", "").toUpperCase());
+            String matName = items.contains("items." + identifier + ".material")
+                    ? items.getString("items." + identifier + ".material").toUpperCase()
+                    : identifier.replaceAll("\\d", "").toUpperCase();
+            Material material = Material.getMaterial(matName);
 
             if (material == null) {
                 Nascraft.getInstance().getLogger().severe("Couldn't load item with identifier: " + identifier);
-                Nascraft.getInstance().getLogger().severe("Reason: Material " + identifier.replaceAll("\\d", "").toUpperCase() + " is not valid!");
+                Nascraft.getInstance().getLogger().severe("Reason: Material " + matName + " is not valid!");
                 return null;
             }
 
             itemStack = new ItemStack(material);
         }
+
+        applyCustomMeta(itemStack, "items." + identifier);
 
         for (String ignoredKey : getIgnoredKeys()) {
             ItemStack finalItemStack = itemStack;
@@ -372,6 +377,31 @@ public class Config {
         return itemStack;
     }
 
+    /**
+     * Applies optional custom-model-data + display-name from config to a configured item,
+     * so resource-pack items (e.g. PAPER + custom_model_data trade goods) can be defined
+     * with just {@code material} + {@code model-data} + {@code display-name} instead of a
+     * fully serialized item-stack. Model data is written to BOTH the float and string CMD
+     * lists so it matches range_dispatch and select resource packs alike.
+     */
+    private void applyCustomMeta(ItemStack itemStack, String base) {
+        if (itemStack == null) return;
+        if (!items.contains(base + ".model-data") && !items.contains(base + ".display-name")) return;
+        org.bukkit.inventory.meta.ItemMeta meta = itemStack.getItemMeta();
+        if (meta == null) return;
+        if (items.contains(base + ".model-data")) {
+            int md = items.getInt(base + ".model-data");
+            org.bukkit.inventory.meta.components.CustomModelDataComponent cmd = meta.getCustomModelDataComponent();
+            cmd.setFloats(java.util.Collections.singletonList((float) md));
+            cmd.setStrings(java.util.Collections.singletonList(String.valueOf(md)));
+            meta.setCustomModelDataComponent(cmd);
+        }
+        if (items.contains(base + ".display-name")) {
+            meta.setDisplayName(org.bukkit.ChatColor.translateAlternateColorCodes('&', items.getString(base + ".display-name")));
+        }
+        itemStack.setItemMeta(meta);
+    }
+
     public ItemStack getItemStackOfChild(String identifier, String childIdentifier) {
 
         ItemStack itemStack = null;
@@ -380,7 +410,10 @@ public class Config {
             itemStack = items.getSerializable("items." + identifier + ".child." + childIdentifier + ".item-stack", ItemStack.class);
 
         if (itemStack == null) {
-            Material material = Material.getMaterial(childIdentifier.replaceAll("\\d", "").toUpperCase());
+            String matName = items.contains("items." + identifier + ".child." + childIdentifier + ".material")
+                    ? items.getString("items." + identifier + ".child." + childIdentifier + ".material").toUpperCase()
+                    : childIdentifier.replaceAll("\\d", "").toUpperCase();
+            Material material = Material.getMaterial(matName);
 
             if (material == null) {
                 Nascraft.getInstance().getLogger().severe("Couldn't load child item with identifier: " + childIdentifier);
@@ -389,6 +422,8 @@ public class Config {
 
             itemStack = new ItemStack(material);
         }
+
+        applyCustomMeta(itemStack, "items." + identifier + ".child." + childIdentifier);
 
         return itemStack;
     }
