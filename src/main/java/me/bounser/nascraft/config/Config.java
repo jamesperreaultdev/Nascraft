@@ -8,6 +8,7 @@ import me.bounser.nascraft.discord.linking.LinkingMethod;
 import me.bounser.nascraft.market.GoodSettings;
 import me.bounser.nascraft.market.MarketManager;
 import me.bounser.nascraft.market.Port;
+import me.bounser.nascraft.market.PortSchedule;
 import me.bounser.nascraft.market.unit.Item;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
@@ -239,14 +240,48 @@ public class Config {
                 ports.getDouble(base + ".location.z"),
                 ports.getDouble(base + ".location.radius", ports.getDouble("defaults.radius", 40)),
                 ports.getInt(base + ".restock.min-minutes", ports.getInt("defaults.restock.min-minutes", 45)),
-                ports.getInt(base + ".restock.max-minutes", ports.getInt("defaults.restock.max-minutes", 90))
+                ports.getInt(base + ".restock.max-minutes", ports.getInt("defaults.restock.max-minutes", 90)),
+                getPortSchedule(portId)
         );
+    }
+
+    /**
+     * Resolves a port's opening hours. Order: the port's own schedule overrides
+     * the defaults.schedule block; a port with neither (and no explicit
+     * always-open) is treated as always open for backwards compatibility.
+     */
+    public PortSchedule getPortSchedule(String portId) {
+
+        String base = "ports." + portId + ".schedule";
+
+        if (ports.getBoolean(base + ".always-open", false)) return PortSchedule.alwaysOpen();
+
+        List<String> windows = ports.getStringList(base + ".windows");
+
+        if (windows.isEmpty()) {
+            if (ports.getBoolean("defaults.schedule.always-open", false)) return PortSchedule.alwaysOpen();
+            windows = ports.getStringList("defaults.schedule.windows");
+        }
+
+        if (windows.isEmpty()) return PortSchedule.alwaysOpen();
+
+        return PortSchedule.fromStrings(windows, portId);
     }
 
     public Set<String> getPortGoods(String portId) {
         ConfigurationSection section = ports.getConfigurationSection("ports." + portId + ".goods");
         if (section == null) return Collections.emptySet();
         return section.getKeys(false);
+    }
+
+    /** Print every buy/sell to the server console. */
+    public boolean getTradeLogConsole() {
+        return config.getBoolean("trade-log.console", true);
+    }
+
+    /** Append every buy/sell to plugins/Nascraft/trades.log. */
+    public boolean getTradeLogFile() {
+        return config.getBoolean("trade-log.file", false);
     }
 
     public boolean getRestockAnnounceEnabled() {
@@ -482,6 +517,57 @@ public class Config {
             Material material = Material.getMaterial(key.toUpperCase());
             if (material == null) continue;
             fills.put(material, inventorygui.getIntegerList("port-menu.fillers." + key));
+        }
+
+        return fills;
+    }
+
+    // GUI: ports directory menu
+
+    public int getDirectoryMenuSize() {
+        return inventorygui.getInt("directory-menu.size", 54);
+    }
+
+    public List<Integer> getDirectoryMenuPortSlots() {
+        List<Integer> slots = inventorygui.getIntegerList("directory-menu.ports.slots");
+        if (!slots.isEmpty()) return slots;
+        return Arrays.asList(10, 11, 12, 13, 14, 15, 16,
+                19, 20, 21, 22, 23, 24, 25,
+                28, 29, 30, 31, 32, 33, 34);
+    }
+
+    public Material getDirectoryMenuOpenMaterial() {
+        return materialOrDefault(inventorygui.getString("directory-menu.ports.open-material"), Material.LIME_CONCRETE);
+    }
+
+    public Material getDirectoryMenuClosedMaterial() {
+        return materialOrDefault(inventorygui.getString("directory-menu.ports.closed-material"), Material.RED_CONCRETE);
+    }
+
+    public int getDirectoryMenuNextSlot() {
+        return inventorygui.getInt("directory-menu.next-button.slot", 53);
+    }
+
+    public int getDirectoryMenuBackSlot() {
+        return inventorygui.getInt("directory-menu.back-button.slot", 45);
+    }
+
+    public Material getDirectoryMenuNavMaterial() {
+        return materialOrDefault(inventorygui.getString("directory-menu.nav-material"), Material.ARROW);
+    }
+
+    public HashMap<Material, List<Integer>> getDirectoryMenuFillers() {
+
+        HashMap<Material, List<Integer>> fills = new HashMap<>();
+
+        ConfigurationSection section = inventorygui.getConfigurationSection("directory-menu.fillers");
+
+        if (section == null) return fills;
+
+        for (String key : section.getKeys(false)) {
+            Material material = Material.getMaterial(key.toUpperCase());
+            if (material == null) continue;
+            fills.put(material, inventorygui.getIntegerList("directory-menu.fillers." + key));
         }
 
         return fills;

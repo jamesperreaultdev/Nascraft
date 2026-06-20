@@ -38,7 +38,7 @@ import java.util.UUID;
  */
 public class MarketMenuManager {
 
-    public enum MenuType { PORT, BUY_SELL }
+    public enum MenuType { PORT, BUY_SELL, DIRECTORY }
 
     public static final class MenuSession {
 
@@ -135,6 +135,25 @@ public class MarketMenuManager {
         player.openInventory(gui);
 
         MenuSession session = new MenuSession(port.getId(), MenuType.PORT);
+        session.setPage(page);
+        sessions.put(player.getUniqueId(), session);
+    }
+
+    public void openDirectory(Player player) { openDirectory(player, 0); }
+
+    public void openDirectory(Player player, int page) {
+
+        Config config = Config.getInstance();
+
+        String title = legacy(Lang.get().message(Message.PORT_DIRECTORY_TITLE));
+
+        Inventory gui = Bukkit.createInventory(null, config.getDirectoryMenuSize(), title);
+
+        DirectoryMenu.populate(gui, page);
+
+        player.openInventory(gui);
+
+        MenuSession session = new MenuSession(null, MenuType.DIRECTORY);
         session.setPage(page);
         sessions.put(player.getUniqueId(), session);
     }

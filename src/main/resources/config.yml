@@ -13,6 +13,14 @@ database:
   # Use -1 to disable (keep all trades logged).
   days-until-history-removed: 60
 
+# Plain-text logging of every buy and sell. This is separate from the database
+# log (viewable in-game with /nascraft log) and the optional Discord log below.
+trade-log:
+  # Print each trade to the server console (shows up in latest.log).
+  console: true
+  # Also append each trade to plugins/Nascraft/trades.log (with a timestamp).
+  file: false
+
 # Money is handled through Vault.
 currency:
   format: "<gradient:#f09947:#feed81>[AMOUNT]$</gradient>"

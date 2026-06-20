@@ -53,6 +53,12 @@ public class InventoryListener implements Listener {
 
         if (Config.getInstance().getMarketPermissionRequirement() && !player.hasPermission("nascraft.market")) return;
 
+        // The directory has no bound port: it is a read-only overview with paging only.
+        if (session.getType() == MarketMenuManager.MenuType.DIRECTORY) {
+            handleDirectoryClick(player, session, event);
+            return;
+        }
+
         Port port = MarketManager.getInstance().getPort(session.getPortId());
 
         if (port == null) {
@@ -76,6 +82,30 @@ public class InventoryListener implements Listener {
 
         if (session.getType() == MarketMenuManager.MenuType.BUY_SELL) {
             handleBuySellMenuClick(player, port, session, event);
+        }
+    }
+
+    private void handleDirectoryClick(Player player, MenuSession session, InventoryClickEvent event) {
+
+        Config config = Config.getInstance();
+
+        int rawSlot = event.getRawSlot();
+
+        if (rawSlot < 0 || rawSlot >= event.getView().getTopInventory().getSize()) return;
+
+        int perPage = config.getDirectoryMenuPortSlots().size();
+        int total = DirectoryMenu.sortedPorts().size();
+
+        if (rawSlot == config.getDirectoryMenuBackSlot() && session.getPage() > 0) {
+            session.setPage(session.getPage() - 1);
+            DirectoryMenu.populate(event.getView().getTopInventory(), session.getPage());
+            return;
+        }
+
+        if (rawSlot == config.getDirectoryMenuNextSlot()
+                && (session.getPage() + 1) * perPage < total) {
+            session.setPage(session.getPage() + 1);
+            DirectoryMenu.populate(event.getView().getTopInventory(), session.getPage());
         }
     }
 
@@ -226,11 +256,19 @@ public class InventoryListener implements Listener {
 
         if (player.hasPermission("nascraft.ports.bypass")) return true;
 
-        if (port.isInside(player.getLocation())) return true;
+        if (!port.isInside(player.getLocation())) {
+            Lang.get().message(player, Message.NOT_IN_PORT);
+            scheduleClose(player);
+            return false;
+        }
 
-        Lang.get().message(player, Message.NOT_IN_PORT);
-        scheduleClose(player);
-        return false;
+        // Closed: refuse the trade but leave the menu open so prices stay browsable.
+        if (!port.isOpen()) {
+            me.bounser.nascraft.market.PortStatus.sendClosed(player, port);
+            return false;
+        }
+
+        return true;
     }
 
     private void endSession(Player player) {

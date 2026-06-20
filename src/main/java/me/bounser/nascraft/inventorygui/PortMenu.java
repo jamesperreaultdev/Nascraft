@@ -53,7 +53,10 @@ public final class PortMenu {
             List<String> infoLore = manager.legacyLines(Lang.get().message(Message.PORT_INFO_LORE)
                     .replace("[GOODS]", String.valueOf(port.getParentItems().size()))
                     .replace("[MIN]", String.valueOf(port.getRestockMinMinutes()))
-                    .replace("[MAX]", String.valueOf(port.getRestockMaxMinutes())));
+                    .replace("[MAX]", String.valueOf(port.getRestockMaxMinutes()))
+                    .replace("[STATUS]", me.bounser.nascraft.market.PortStatus.statusText(port))
+                    .replace("[HOURS]", me.bounser.nascraft.market.PortStatus.hoursText(port))
+                    .replace("[NEXT]", me.bounser.nascraft.market.PortStatus.nextChangeText(port)));
 
             int infoSlot = config.getPortMenuInfoSlot();
 

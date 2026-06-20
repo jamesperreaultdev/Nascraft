@@ -46,6 +46,12 @@ public class MarketCommand extends Command {
             return;
         }
 
+        // /market list -> the ports directory (open/closed status and hours of every port).
+        if (args.length >= 1 && args[0].equalsIgnoreCase("list")) {
+            MarketMenuManager.getInstance().openDirectory(player);
+            return;
+        }
+
         Port port;
 
         if (args.length >= 1) {
@@ -66,8 +72,9 @@ public class MarketCommand extends Command {
 
             port = MarketManager.getInstance().getPortAt(player.getLocation());
 
+            // Not standing in a port: show the directory so they can find one and see its hours.
             if (port == null) {
-                Lang.get().message(player, Message.NOT_IN_PORT);
+                MarketMenuManager.getInstance().openDirectory(player);
                 return;
             }
         }
@@ -78,9 +85,13 @@ public class MarketCommand extends Command {
     @Override
     public List<String> onTabComplete(CommandSender sender, String[] args) {
 
-        if (args.length == 1 && sender.hasPermission("nascraft.ports.bypass"))
-            return StringUtil.copyPartialMatches(args[0],
-                    new ArrayList<>(MarketManager.getInstance().getPortIds()), new ArrayList<>());
+        if (args.length == 1) {
+            List<String> options = new ArrayList<>();
+            options.add("list");
+            if (sender.hasPermission("nascraft.ports.bypass"))
+                options.addAll(MarketManager.getInstance().getPortIds());
+            return StringUtil.copyPartialMatches(args[0], options, new ArrayList<>());
+        }
 
         return Collections.emptyList();
     }

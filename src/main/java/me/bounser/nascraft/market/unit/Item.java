@@ -228,6 +228,8 @@ public class Item {
 
         DatabaseManager.get().getDatabase().saveTrade(trade);
 
+        me.bounser.nascraft.managers.TradeLogger.getInstance().log(trade);
+
         if (Config.getInstance().getDiscordEnabled() && Config.getInstance().getLogChannelEnabled())
             DiscordLog.getInstance().sendTradeLog(trade);
 
@@ -305,6 +307,9 @@ public class Item {
         Trade trade = new Trade(this, LocalDateTime.now(), worth, amount, false, false, uuid);
 
         DatabaseManager.get().getDatabase().saveTrade(trade);
+
+        me.bounser.nascraft.managers.TradeLogger.getInstance().log(trade);
+
         if (Config.getInstance().getDiscordEnabled() && Config.getInstance().getLogChannelEnabled())
             DiscordLog.getInstance().sendTradeLog(trade);
         MarketManager.getInstance().addOperation();

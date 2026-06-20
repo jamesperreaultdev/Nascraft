@@ -70,6 +70,11 @@ public class SellAllCommand extends Command {
             return;
         }
 
+        if (!port.isOpen() && !player.hasPermission("nascraft.ports.bypass")) {
+            me.bounser.nascraft.market.PortStatus.sendClosed(player, port);
+            return;
+        }
+
         // Group the sellable inventory content per port item.
 
         Map<String, Item> items = new LinkedHashMap<>();

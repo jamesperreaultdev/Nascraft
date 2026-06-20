@@ -29,6 +29,10 @@ public class TasksManager {
 
     private final java.util.Map<String, BukkitTask> restockTasks = new java.util.HashMap<>();
 
+    // Incremented on cancelRestockTasks() so timers whose async countdown already
+    // elapsed can detect a reload and abort instead of restocking twice.
+    private volatile int restockGeneration = 0;
+
     private final Random random = new Random();
 
     public static TasksManager getInstance() { return instance == null ? instance = new TasksManager() : instance; }
@@ -147,6 +151,10 @@ public class TasksManager {
     }
 
     public void cancelRestockTasks() {
+        // Bumping the generation makes any timer that has already fired (its
+        // async countdown elapsed and a main-thread restock is queued) abort
+        // instead of starting a stale, duplicate restock chain after a reload.
+        restockGeneration++;
         for (BukkitTask task : restockTasks.values())
             if (task != null && !task.isCancelled()) task.cancel();
         restockTasks.clear();
@@ -159,20 +167,29 @@ public class TasksManager {
 
         int minutes = min + random.nextInt(max - min + 1);
 
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(Nascraft.getInstance(), () -> {
+        final int generation = restockGeneration;
 
-            // Re-resolve: the port may have been replaced by a reload.
-            Port currentPort = MarketManager.getInstance().getPort(port.getId());
-            if (currentPort == null) return;
+        // The countdown runs off the main thread; the restock itself mutates
+        // shared stock and announces to players (Bukkit API), so it is marshaled
+        // back onto the main thread when the timer fires.
+        BukkitTask task = Bukkit.getScheduler().runTaskLaterAsynchronously(Nascraft.getInstance(), () ->
+                Bukkit.getScheduler().runTask(Nascraft.getInstance(), () -> {
 
-            currentPort.restock();
+                    // A reload happened while we were counting down: drop this chain.
+                    if (generation != restockGeneration) return;
 
-            if (Config.getInstance().getRestockAnnounceEnabled())
-                announceRestock(currentPort);
+                    // Re-resolve: the port may have been replaced by a reload.
+                    Port currentPort = MarketManager.getInstance().getPort(port.getId());
+                    if (currentPort == null) return;
 
-            scheduleNextRestock(currentPort);
+                    currentPort.restock();
 
-        }, (long) minutes * 60 * ticksPerSecond);
+                    if (Config.getInstance().getRestockAnnounceEnabled())
+                        announceRestock(currentPort);
+
+                    scheduleNextRestock(currentPort);
+
+                }), (long) minutes * 60 * ticksPerSecond);
 
         restockTasks.put(port.getId(), task);
     }
