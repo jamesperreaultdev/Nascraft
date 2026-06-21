@@ -10,10 +10,13 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 
 public class Lang {
 
     private YamlConfiguration lang;
+    /** Keys shipped in the jar for the selected language; used to fill in any the on-disk file is missing. */
+    private YamlConfiguration defaults;
 
     private final MiniMessage miniMessage;
     private final BukkitAudiences audience;
@@ -43,6 +46,7 @@ public class Lang {
         }
 
         lang = YamlConfiguration.loadConfiguration(language);
+        defaults = loadBundled("langs/" + Config.getInstance().getSelectedLanguage() + ".yml");
 
         this.audience = Nascraft.getInstance().adventure();
         this.miniMessage = MiniMessage.miniMessage();
@@ -59,6 +63,7 @@ public class Lang {
         }
 
         lang = YamlConfiguration.loadConfiguration(language);
+        defaults = loadBundled("langs/" + Config.getInstance().getSelectedLanguage() + ".yml");
         Formatter.setSeparator(Separator.valueOf(message(Message.SEPARATOR).toUpperCase()));
     }
 
@@ -67,9 +72,32 @@ public class Lang {
         if (!resourceFile.exists()) Nascraft.getInstance().saveResource(resourcePath, false);
     }
 
+    /** Load a lang resource straight from the jar (the shipped defaults), or null if absent. */
+    private YamlConfiguration loadBundled(String resourcePath) {
+        InputStream in = Nascraft.getInstance().getResource(resourcePath);
+        if (in == null) return null;
+        try (InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+            return YamlConfiguration.loadConfiguration(reader);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Resolve a message: prefer the admin's on-disk lang file, but fall back to the jar's
+     * shipped default when the file is missing a key (e.g. an older lang file after a plugin
+     * update added new messages). Returns null only when neither source has the key.
+     */
+    private String lookup(Message msg) {
+        String key = msg.name().toLowerCase();
+        String value = this.lang.getString(key);
+        if (value == null && defaults != null) value = defaults.getString(key);
+        return value;
+    }
+
     /** Null-safe lang lookup: missing keys warn and return empty instead of NPE-ing MiniMessage. */
     private String raw(Message lang) {
-        String value = this.lang.getString(lang.name().toLowerCase());
+        String value = lookup(lang);
         if (value == null) {
             Nascraft.getInstance().getLogger().warning("Lang section not found: " + lang.name().toLowerCase());
             return "";
@@ -86,16 +114,14 @@ public class Lang {
     }
 
     public String message(Message lang) {
-        if (!this.lang.contains(lang.name().toLowerCase())) {
+        String value = lookup(lang);
+        if (value == null) {
             Nascraft.getInstance().getLogger().warning("Lang section not found: " + lang.name().toLowerCase());
             return "Lang section not found: " + lang.name().toLowerCase();
         }
-        return raw(lang).replace("&", "§"); }
+        return value.replace("&", "§"); }
 
     public void message(Player player, Message lang, String worth, String amount, String name) {
-        if (!this.lang.contains(lang.name().toLowerCase())) {
-            Nascraft.getInstance().getLogger().warning("Lang section not found: " + lang.name().toLowerCase());
-        }
         audience.player(player).sendMessage(miniMessage.deserialize(raw(lang)
                 .replace("[WORTH]", worth)
                 .replace("[AMOUNT]", amount)
